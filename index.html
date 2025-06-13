@@ -832,7 +832,7 @@ ${sourceChunkData.text}`;
             if (headerTitle) {
                 const selectedShape = SHAPES.find(s => s.name === chunkData.shapeName);
                 const selectedColor = COLORS.find(c => c.name === chunkData.colorName);
-                headerTitle.innerHTML = `<span class="tag">${chunkData.chunkTypeTag}</span> | <span class="shape-symbol ${selectedColor?.tailwindClass || ''}">${selectedShape?.symbol || ''}</span> ${chunkData.shapeName} | <span class="color-symbol ${selectedColor?.tailwindClass || ''}">${selectedColor?.symbol || ''}</span> ${chunkData.colorName}`;
+                headerTitle.innerHTML = `<span class="tag">${chunkData.chunkTypeTag}</span> | <span class="shape-symbol ${selectedColor?.tailwindClass || ''}" title="${selectedShape?.name}: ${selectedShape?.meaning}">${selectedShape?.symbol}</span> <span title="${selectedShape?.name}: ${selectedShape?.meaning}">${selectedShape?.meaning.split(',')[0]}</span> | <span class="color-symbol ${selectedColor?.tailwindClass || ''}" title="${selectedColor?.name}: ${selectedColor?.essence}">${selectedColor?.symbol}</span> <span title="${selectedColor?.name}: ${selectedColor?.essence}">${selectedColor?.essence.split(',')[0]}</span>`;
             }
         }
 
@@ -921,11 +921,7 @@ ${sourceChunkData.text}`;
 
             const headerTitle = document.createElement('span');
             headerTitle.className = 'chunk-header-title';
-            const initialShape = SHAPES.find(s => s.name === chunkData.shapeName);
-            const initialColor = COLORS.find(c => c.name === chunkData.colorName);
-            headerTitle.innerHTML = `<span class="tag">${chunkData.chunkTypeTag}</span> | <span class="shape-symbol ${initialColor?.tailwindClass || ''}">${initialShape?.symbol || ''}</span> ${chunkData.shapeName} | <span class="color-symbol ${initialColor?.tailwindClass || ''}">${initialColor?.symbol || ''}</span> ${chunkData.colorName}`;
-
-
+            
             const actionsContainer = document.createElement('div'); actionsContainer.className = 'chunk-actions';
 
             // AI Button
@@ -1815,10 +1811,12 @@ ${sourceChunkData.text}`;
                 if (chunk.nextChunkId) {
                     const targetChunkData = chunksMap.get(chunk.nextChunkId);
                     if (targetChunkData) {
-                        linkInfo = `\n  -> Links to: ${targetChunkData.chunkTypeTag} (${targetChunkData.shapeName})`;
+                        linkInfo = `\n  -> Links to: ${targetChunkData.chunkTypeTag}`;
                     }
                 }
-                const header = `${chunk.chunkTypeTag} | ${chunk.shapeSymbol} ${chunk.shapeName} | ${chunk.colorSymbol} ${chunk.colorName}`;
+                const shape = SHAPES.find(s => s.name === chunk.shapeName) || {};
+                const color = COLORS.find(c => c.name === chunk.colorName) || {};
+                const header = `${chunk.chunkTypeTag} | ${shape.symbol} ${shape.meaning?.split(',')[0]} | ${color.symbol} ${color.essence?.split(',')[0]}`;
                 const tempDiv = document.createElement('div'); tempDiv.innerHTML = chunk.text;
                 const plainText = tempDiv.textContent || tempDiv.innerText || "";
                 return `${header}\n${plainText}${linkInfo}\n\n---\n`;
@@ -1878,31 +1876,40 @@ ${sourceChunkData.text}`;
             downloadFile(text, 'chorus-notes.txt', 'text/plain');
             exportDropdown.classList.add('hidden');
         });
+
         exportHtmlBtn.addEventListener('click', () => {
             if (chunks.length === 0) { showMessage("Empty Board", "Nothing to export."); return; }
             const exportOrderChunks = getOrderedChunksForExport();
-            let htmlContent = `<html><head><title>CHORUS Notes</title><style>body{font-family:sans-serif; line-height:1.6;} .chunk{border:1px solid #eee; margin-bottom:20px; padding:15px; border-radius:5px; box-shadow: 2px 2px 5px #ccc;} h3{margin-top:0; font-size:1.1em; color:#333; border-bottom:1px solid #eee; padding-bottom:5px;} .chunk-meta{font-size:0.9em; color:#777; margin-bottom:10px;} .link-info{font-style:italic; color:#555; font-size:0.85em;}</style></head><body><h1>CHORUS Notes</h1>`;
+            let htmlContent = `<html><head><title>CHORUS Notes</title><style>body{font-family:sans-serif; line-height:1.6;} .chunk{border:1px solid #eee; margin-bottom:20px; padding:15px; border-radius:5px; box-shadow: 2px 2px 5px #ccc;} h3{margin-top:0; font-size:1.1em; color:#333; border-bottom:1px solid #eee; padding-bottom:5px;} .chunk-meta{font-size:0.9em; color:#777; margin-bottom:10px;} .chunk-meta span[title]{cursor:help; border-bottom: 1px dotted #777;} .link-info{font-style:italic; color:#555; font-size:0.85em;}</style></head><body><h1>CHORUS Notes</h1>`;
             exportOrderChunks.forEach(chunk => {
-                const headerMeta = `${chunk.chunkTypeTag} | ${chunk.shapeSymbol} ${chunk.shapeName} | ${chunk.colorSymbol} ${chunk.colorName}`;
+                const shape = SHAPES.find(s => s.name === chunk.shapeName) || {};
+                const color = COLORS.find(c => c.name === chunk.colorName) || {};
+                const shapeHtml = `<span title="${shape.name}: ${shape.meaning}">${shape.symbol} ${shape.meaning?.split(',')[0]}</span>`;
+                const colorHtml = `<span title="${color.name}: ${color.essence}">${color.symbol} ${color.essence?.split(',')[0]}</span>`;
+                const headerMeta = `${chunk.chunkTypeTag} &bull; ${shapeHtml} &bull; ${colorHtml}`;
                 let linkInfoHtml = "";
                 if (chunk.nextChunkId) {
                     const targetChunkData = chunksMap.get(chunk.nextChunkId);
                     if (targetChunkData) {
-                        linkInfoHtml = `<div class="link-info">Links to: ${targetChunkData.chunkTypeTag} (${targetChunkData.shapeName})</div>`;
+                        linkInfoHtml = `<div class="link-info">Links to: ${targetChunkData.chunkTypeTag}</div>`;
                     }
                 }
-                htmlContent += `<div class="chunk"><h3>${chunk.chunkTypeTag}</h3><div class="chunk-meta">${headerMeta.replace(/ \| /g, ' &bull; ')}</div><div>${chunk.text}</div>${linkInfoHtml}</div>`;
+                htmlContent += `<div class="chunk"><h3>${chunk.chunkTypeTag}</h3><div class="chunk-meta">${headerMeta}</div><div>${chunk.text}</div>${linkInfoHtml}</div>`;
             });
             htmlContent += '</body></html>';
             downloadFile(htmlContent, 'chorus-notes.html', 'text/html');
             exportDropdown.classList.add('hidden');
         });
+
         exportMdBtn.addEventListener('click', () => {
             if (chunks.length === 0) { showMessage("Empty Board", "Nothing to export."); return; }
             const exportOrderChunks = getOrderedChunksForExport();
             let mdContent = '# CHORUS Notes\n\n';
             exportOrderChunks.forEach(chunk => {
-                const headerMeta = `${chunk.chunkTypeTag} | ${chunk.shapeSymbol} ${chunk.shapeName} | ${chunk.colorSymbol} ${chunk.colorName}`;
+                const shape = SHAPES.find(s => s.name === chunk.shapeName) || {};
+                const color = COLORS.find(c => c.name === chunk.colorName) || {};
+                const headerMeta = `${chunk.chunkTypeTag} • ${shape.symbol} ${shape.meaning?.split(',')[0]} • ${color.symbol} ${color.essence?.split(',')[0]}`;
+                
                 let textContent = chunk.text;
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = textContent;
@@ -1912,13 +1919,15 @@ ${sourceChunkData.text}`;
                 tempDiv.querySelectorAll('em, i').forEach(e => e.replaceWith(`*${e.textContent}*`));
                 tempDiv.querySelectorAll('a').forEach(a => a.replaceWith(`[${a.textContent}](${a.href})`));
                 textContent = (tempDiv.textContent || tempDiv.innerText || "").trim();
+                
                 mdContent += `## ${chunk.chunkTypeTag}\n`;
-                mdContent += `*Metadata: ${headerMeta.replace(/ \| /g, ' &bull; ')}*\n\n`;
+                mdContent += `*Metadata: ${headerMeta}*\n\n`;
                 mdContent += `${textContent}\n`;
+                
                 if (chunk.nextChunkId) {
                     const targetChunkData = chunksMap.get(chunk.nextChunkId);
                     if (targetChunkData) {
-                        mdContent += `\n  *&rarr; Links to: ${targetChunkData.chunkTypeTag} (${targetChunkData.shapeName})*\n`;
+                        mdContent += `\n  *→ Links to: ${targetChunkData.chunkTypeTag}*\n`;
                     }
                 }
                 mdContent += `\n---\n\n`;
@@ -1926,6 +1935,7 @@ ${sourceChunkData.text}`;
             downloadFile(mdContent, 'chorus-notes.md', 'text/markdown');
             exportDropdown.classList.add('hidden');
         });
+
         function downloadFile(content, fileName, contentType) {
             const a = document.createElement('a');
             const file = new Blob([content], {type: contentType});
