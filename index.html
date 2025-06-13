@@ -1,0 +1,2070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>CHORUS Note Mapping with Gemini AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior: none;
+            overflow: hidden; /* Prevent scrollbars on the body itself */
+        }
+        #appContainer {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .toolbar {
+            flex-shrink: 0;
+        }
+        #noteCanvasContainer {
+            position: relative;
+            flex-grow: 1;
+            overflow: hidden; /* Crucial for containing the pannable canvas */
+            background-color: #e9e9e9;
+            cursor: grab;
+            touch-action: none; /* Prevent default touch actions like scrolling on this container */
+        }
+        #noteCanvasContainer:focus {
+            outline: none;
+        }
+        #noteCanvasContainer.panning {
+            cursor: grabbing;
+        }
+        #transformContainer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            transform-origin: 0 0;
+            will-change: transform; /* Hint to the browser for transform optimization */
+        }
+        #noteCanvas {
+            width: 3000px; /* Fixed size of the pannable canvas */
+            height: 2000px; /* Fixed size of the pannable canvas */
+            position: relative;
+            background-image:
+                linear-gradient(to right, #d0d0d0 1px, transparent 1px),
+                linear-gradient(to bottom, #d0d0d0 1px, transparent 1px);
+            background-size: 20px 20px;
+            background-color: #fdfdfd;
+        }
+        #svgCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .chorus-chunk {
+            position: absolute;
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            min-width: 200px;
+            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+            overflow: visible;
+            transition: border-color 0.2s, outline 0.2s;
+            z-index: 1;
+        }
+        .chorus-chunk.selected-chunk {
+            border-color: #2563eb;
+            border-width: 2px;
+        }
+        .chorus-chunk.linking-source-chunk {
+            outline: 2px solid #16a34a;
+            border-color: #16a34a;
+        }
+        .chunk-header {
+            background-color: #f0f0f0;
+            padding: 6px 10px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: move;
+            border-bottom: 1px solid #ccc;
+            user-select: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            touch-action: none;
+        }
+        .chunk-header-title .tag { font-weight: 600; }
+        .chunk-header .shape-symbol, .chunk-header .color-symbol { font-weight: normal; }
+        .chunk-actions { display: flex; align-items: center; }
+        .chunk-action-btn { background: none; border: none; cursor: pointer; padding: 2px; margin-left: 4px; line-height: 1; }
+        .chunk-action-btn svg { width: 14px; height: 14px; stroke: #555; stroke-width: 2; }
+        .chunk-action-btn:hover svg { stroke: #333; }
+        .delete-chunk-btn:hover svg { stroke: #d00; } /* Specific hover for delete */
+        .ai-chunk-btn:hover svg { stroke: #8b5cf6; } /* Specific hover for AI */
+        .link-chunk-btn.linking-active svg { stroke: #16a34a !important; } /* Ensure active linking color takes precedence */
+        .chunk-content {
+            flex-grow: 1;
+            padding: 12px;
+            font-size: 0.9rem;
+            overflow-y: auto;
+            outline: none;
+        }
+        .resize-handle {
+            width: 16px;
+            height: 16px;
+            background-color: #bbb;
+            position: absolute;
+            right: -4px;
+            bottom: -4px;
+            cursor: se-resize;
+            border-top-left-radius: 4px;
+            z-index: 10;
+            touch-action: none;
+        }
+
+        /* SVG Line Styling */
+        .connecting-line {
+            stroke: #3b82f6;
+            stroke-width: 2;
+            fill: none;
+        }
+        .arrow-head {
+            fill: #3b82f6;
+        }
+
+        /* Modal Styling */
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 10000;
+        }
+        .modal-content {
+            background-color: white; padding: 24px; border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 90%; max-width: 500px;
+        }
+        #helpModal .modal-content, #messageModal .modal-content {
+             display: flex;
+             flex-direction: column;
+             max-height: 80vh;
+        }
+         #messageText {
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+        .form-input, .form-textarea, .form-select {
+            width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px;
+            margin-bottom: 12px; background-color: white;
+        }
+        .form-textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+        .btn {
+            padding: 8px 12px; border-radius: 6px; font-weight: 500; cursor: pointer;
+            transition: background-color 0.2s, color 0.2s, opacity 0.2s;
+            margin-right: 8px; border: none; display: inline-flex; align-items: center;
+            justify-content: center; white-space: nowrap;
+        }
+        .btn svg.icon { width: 18px; height: 18px; margin-right: 6px; }
+        .btn svg.spinner { width: 18px; height: 18px; margin:auto; }
+        .btn.loading { opacity: 0.7; cursor: not-allowed; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background-color: #2563eb; color: white; }
+        .btn-primary:hover:not(:disabled):not(.loading) { background-color: #1d4ed8; }
+        .btn-secondary { background-color: #e5e7eb; color: #374151; }
+        .btn-secondary:hover:not(:disabled):not(.loading) { background-color: #d1d5db; }
+        .btn-danger { background-color: #dc2626; color: white; }
+        .btn-danger:hover:not(:disabled):not(.loading) { background-color: #b91c1c; }
+        .btn-donate { background-color: #ec4899; color: white; }
+        .btn-donate:hover:not(:disabled):not(.loading) { background-color: #db2777; }
+
+
+        /* Help Modal Specifics */
+        #help-scroll-content {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding-right: 1rem;
+        }
+        .help-section { border-bottom: 1px solid #e5e7eb; padding-bottom: 12px; margin-bottom: 12px; }
+        .help-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .help-section h3 { font-size: 1.1rem; font-weight: 600; margin-top: 16px; margin-bottom: 8px; }
+        .help-section ul { list-style-type: disc; margin-left: 20px; }
+        .help-section li { margin-bottom: 6px; }
+        .help-section code { background-color: #f3f4f6; padding: 2px 4px; border-radius: 4px; font-size: 0.85em; }
+        .help-section a { color: #2563eb; text-decoration: underline; }
+        .help-section a:hover { color: #1d4ed8; }
+        optgroup { font-weight: bold; font-style: italic; background-color: #f0f0f0; color: #333; }
+
+        /* Body class for linking mode cursor */
+        body.linking-mode { cursor: crosshair; }
+        body.linking-mode .chorus-chunk:not(.linking-source-chunk):hover {
+            outline: 2px dashed #2563eb;
+        }
+        #noteCanvasContainer.panning { cursor: grabbing; }
+
+        /* Close button for modals */
+        .close-button {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            line-height: 1;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        #exportDropdown { z-index: 1000; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+    <div id="appContainer">
+        <!-- Toolbar -->
+        <div class="toolbar p-3 bg-white shadow-md flex flex-col sm:flex-row sm:flex-wrap items-center justify-between gap-2 print:hidden">
+            <!-- Left Aligned Buttons -->
+            <div class="flex items-center space-x-2 w-full sm:w-auto justify-center sm:justify-start mb-2 sm:mb-0">
+                <button id="addChunkBtn" class="btn btn-primary" title="Add Chunk (A)">Add</button>
+                <button id="shuffleChunksBtn" class="btn btn-secondary" title="Shuffle Chunks">Shuffle</button>
+                <button id="clearCanvasBtn" class="btn btn-danger" title="Clear Canvas">Clear</button>
+                <button id="undoDeleteBtn" class="btn btn-secondary" title="Undo Last Delete (Ctrl/Cmd+Z)" disabled>Undo</button>
+            </div>
+            <!-- Center Buttons -->
+            <div class="flex items-center space-x-2 w-full sm:w-auto justify-center mb-2 sm:mb-0">
+                 <button id="summarizeBtn" class="btn btn-secondary" title="Summarize the board with AI">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon -ml-1" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.25 10.5l-1.5-1.5 1.5-1.5 1.5 1.5-1.5 1.5ZM16.5 3.75l-1.5-1.5 1.5-1.5 1.5 1.5-1.5 1.5Z" /></svg>
+                    Summarize
+                 </button>
+                <button id="zoomInBtn" class="btn btn-secondary" title="Zoom In (+/=)">+</button>
+                <button id="zoomOutBtn" class="btn btn-secondary" title="Zoom Out (-)">-</button>
+                <button id="zoomResetBtn" class="btn btn-secondary" title="Reset Zoom (0)">100%</button>
+            </div>
+            <!-- Right Aligned Buttons -->
+            <div class="flex items-center space-x-2 w-full sm:w-auto justify-center sm:justify-end mb-2 sm:mb-0">
+                <button id="saveBtn" class="btn btn-secondary" title="Save to File (Ctrl/Cmd+S)">Save</button>
+                <button id="loadBtn" class="btn btn-secondary" title="Load from File (Ctrl/Cmd+O)">Load</button>
+
+                <!-- Export Dropdown -->
+                <div class="relative inline-block text-left">
+                    <button id="exportBtn" class="btn btn-secondary" title="Export Options">Export</button>
+                    <div id="exportDropdown" class="origin-top-right absolute right-0 mt-2 w-40 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 hidden">
+                        <div class="py-1" role="menu" aria-orientation="vertical" aria-labelledby="options-menu">
+                            <button id="exportTxtBtn" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">TXT</button>
+                            <button id="exportHtmlBtn" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">HTML</button>
+                            <button id="exportMdBtn" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">MD</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+             <!-- Far Right Buttons & Info -->
+            <div class="flex flex-col items-center sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-1 w-full sm:w-auto justify-center sm:justify-end">
+                <span id="chunkCountDisplay" class="text-sm text-gray-500 mx-2">Chunks: 0</span>
+                <a href="https://ko-fi.com/thorstenbecker" target="_blank" style="text-decoration: none;">
+                     <button class="btn btn-donate" title="Donate on Ko-fi">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon -ml-1" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
+                        </svg>
+                        Donate
+                    </button>
+                </a>
+                <!-- Settings Button -->
+                <button id="settingsBtn" class="btn btn-secondary" title="Settings">
+                     <svg xmlns="http://www.w3.org/2000/svg" class="icon -ml-1" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.438.995s.145.755.438.995l1.003.827c.424.35.534.954.26 1.431l-1.296 2.247a1.125 1.125 0 0 1-1.37.49l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 0 1-.22.128c-.331.183-.581.495-.644.87l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.063-.374-.313-.686-.645-.87a6.52 6.52 0 0 1-.22-.127c-.324-.196-.72-.257-1.075-.124l-1.217.456a1.125 1.125 0 0 1-1.37-.49l-1.296-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.437-.995s-.145-.755-.437-.995l-1.004-.827a1.125 1.125 0 0 1-.26-1.431l1.296-2.247a1.125 1.125 0 0 1 1.37-.49l1.217.456c.355.133.75.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.87l.213-1.281Z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                    </svg>
+                    Settings
+                </button>
+                <button id="helpBtn" class="btn btn-secondary" title="Help (?)">Help</button>
+            </div>
+        </div>
+
+        <!-- Main Canvas Area -->
+        <div id="noteCanvasContainer" tabindex="-1">
+            <div id="transformContainer">
+                <div id="noteCanvas">
+                    <!-- SVG Canvas for connections - must be direct child for proper sizing -->
+                    <svg id="svgCanvas"></svg>
+                    <!-- Chunks will be appended here by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="text-center p-2 text-xs text-gray-500 print:hidden">
+        &copy; <span id="copyrightYear"></span> Thorsten Becker.
+        <a href="https://www.linkedin.com/in/thorsten-becker-de/" target="_blank" class="text-blue-600 hover:underline">Connect on LinkedIn</a>.
+    </footer>
+
+    <!-- Add Chunk Modal -->
+    <div id="addChunkModal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Add New CHORUS Chunk</h2>
+            <label for="chunkTypeSelect" class="block mb-1 font-medium">Chunk Type:</label>
+            <select id="chunkTypeSelect" class="form-select"></select>
+
+            <label for="chunkShapeSelect" class="block mb-1 mt-3 font-medium">Shape:</label>
+            <select id="chunkShapeSelect" class="form-select"></select>
+
+            <label for="chunkColorSelect" class="block mb-1 mt-3 font-medium">Color Tag:</label>
+            <select id="chunkColorSelect" class="form-select"></select>
+
+            <div class="mt-6 flex justify-end">
+                <button id="cancelAddChunkBtn" class="btn btn-secondary">Cancel</button>
+                <button id="confirmAddChunkBtn" class="btn btn-primary">Add Chunk</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Chunk Modal -->
+    <div id="editChunkModal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Edit CHORUS Chunk</h2>
+            <input type="hidden" id="editingChunkId">
+            <label for="editChunkTypeSelect" class="block mb-1 font-medium">Chunk Type:</label>
+            <select id="editChunkTypeSelect" class="form-select"></select>
+
+            <label for="editChunkShapeSelect" class="block mb-1 mt-3 font-medium">Shape:</label>
+            <select id="editChunkShapeSelect" class="form-select"></select>
+
+            <label for="editChunkColorSelect" class="block mb-1 mt-3 font-medium">Color Tag:</label>
+            <select id="editChunkColorSelect" class="form-select"></select>
+
+            <div class="mt-6 flex justify-end">
+                <button id="cancelEditChunkBtn" class="btn btn-secondary">Cancel</button>
+                <button id="confirmEditChunkBtn" class="btn btn-primary">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Action Modal -->
+    <div id="aiActionModal" class="modal hidden">
+        <div class="modal-content">
+             <span id="closeAiActionModalBtn" class="close-button">&times;</span>
+            <h2 class="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.25 10.5l-1.5-1.5 1.5-1.5 1.5 1.5-1.5 1.5ZM16.5 3.75l-1.5-1.5 1.5-1.5 1.5 1.5-1.5 1.5Z" /></svg>
+                AI Assistant
+            </h2>
+            <p class="text-sm text-gray-600 mb-4">Powered by Gemini. Current chunk content will be used as context.</p>
+
+            <label for="aiPromptTextarea" class="block mb-1 mt-3 font-medium">Your Prompt:</label>
+            <textarea id="aiPromptTextarea" class="form-textarea" placeholder="e.g., 'Rewrite this to be more concise.' or 'Brainstorm three related ideas.'"></textarea>
+
+            <div class="mt-4 flex flex-wrap justify-between items-center gap-2">
+                <button id="aiActionSuggestNextBtn" class="btn btn-secondary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon -ml-1" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.25 10.5l-1.5-1.5 1.5-1.5 1.5 1.5-1.5 1.5ZM16.5 3.75l-1.5-1.5 1.5-1.5 1.5 1.5-1.5 1.5Z" /></svg>
+                    Suggest Next
+                </button>
+                <div class="flex-grow"></div>
+                <button id="cancelAiActionBtn" class="btn btn-secondary">Cancel</button>
+                <button id="aiActionGenerateBtn" class="btn btn-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon -ml-1" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.25 10.5l-1.5-1.5 1.5-1.5 1.5 1.5-1.5 1.5ZM16.5 3.75l-1.5-1.5 1.5-1.5 1.5 1.5-1.5 1.5Z" /></svg>
+                    Generate & Replace
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings/API Key Modal -->
+    <div id="settingsModal" class="modal hidden">
+        <div class="modal-content">
+            <span id="closeSettingsModalBtn" class="close-button">&times;</span>
+            <h2>Settings</h2>
+
+            <label for="geminiApiKeyInput" class="block mb-1 mt-4 font-medium">Google AI API Key</label>
+            <p class="text-xs text-gray-500 mb-2">Required for AI features. Your key is saved only in this browser's local storage.</p>
+            <input type="password" id="geminiApiKeyInput" class="form-input" placeholder="Enter your API key here">
+            <p class="text-xs text-gray-500 mb-4">You can get a key from <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-blue-600 hover:underline">Google AI Studio</a>.</p>
+
+            <div class="mt-6 flex justify-end">
+                <button id="cancelSettingsBtn" class="btn btn-secondary">Cancel</button>
+                <button id="saveSettingsBtn" class="btn btn-primary">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Help Modal -->
+    <div id="helpModal" class="modal hidden">
+        <div class="modal-content">
+            <span id="closeHelpModalSpan" class="close-button">&times;</span>
+            <h2>CHORUS Quick Help</h2>
+            <div id="help-scroll-content">
+                <div class="help-section">
+                    <h3>What is CHORUS?</h3>
+                    <p class="mb-2">CHORUS is a system for those who think in constellations, not straight lines. It offers structure without rigidity and clarity without collapse. It’s a modular, visual, and non-linear method for organizing notes and a way of navigating your own cognition.</p>
+                    <p>Built from <strong>chunks</strong>, not outlines, it uses <strong>shape</strong> and <strong>color</strong> for emotional and structural resonance. It honors <em>how</em> you think, not how you’re told to write.</p>
+                    <p class="mt-3">Read the full documentation here: <a href="https://drive.google.com/file/d/1qXp0-kV4HUEdkB1A_epyTnopkdUdl3rY/view?usp=sharing" id="fullDocLink" target="_blank">Full CHORUS Documentation</a>.</p>
+                </div>
+                <div class="help-section">
+                    <h3>✨ Gemini AI Features</h3>
+                    <p>This app now includes AI features powered by Google's Gemini model to supercharge your workflow.</p>
+                     <ul>
+                        <li><strong>AI Assistant:</strong> Click the 'sparkle' icon ✨ in a chunk's header to open the AI Assistant. Use it to generate text, rewrite content, brainstorm ideas, and more, directly within your chunks.</li>
+                        <li><strong>Suggest Next Chunk:</strong> Inside the AI Assistant, click 'Suggest Next' to have Gemini analyze your current note and automatically create a new, linked chunk with a logical follow-up idea.</li>
+                        <li><strong>Summarize Board:</strong> Click the 'Summarize' button in the top toolbar to get a high-level summary of all notes on your canvas.</li>
+                        <li><strong>API Key:</strong> You must provide your own Google AI API key to use these features. Click the <strong>Settings</strong> button in the top toolbar to enter your key. Your key is saved locally and never sent anywhere except to the Google API.</li>
+                    </ul>
+                </div>
+                <div class="help-section"><h3>Keyboard Shortcuts</h3>
+                    <ul id="shortcutsList">
+                      <li><code>Ctrl/Cmd + S</code>: Save the current map.</li>
+                      <li><code>Ctrl/Cmd + O</code>: Load a map from a file.</li>
+                      <li><code>Ctrl/Cmd + Z</code>: Undo the last deleted chunk.</li>
+                      <li><code>A</code>: Add a new chunk.</li>
+                      <li><code>+</code> or <code>=</code>: Zoom in.</li>
+                      <li><code>-</code>: Zoom out.</li>
+                      <li><code>0</code>: Reset zoom to 100%.</li>
+                      <li><code>?</code> or <code>/</code>: Open this help window.</li>
+                      <li><code>Esc</code>: Close modals, cancel linking, or deselect chunks.</li>
+                      <li><code>Delete</code> / <code>Backspace</code>: Delete selected chunk (with confirmation).</li>
+                    </ul>
+                </div>
+                <div class="help-section"><h3>Core Chunk Types (C - Chunk)</h3><ul id="helpCoreChunks"></ul></div>
+                <div class="help-section"><h3>Optional Chunk Types</h3><ul id="helpOptionalChunks"></ul></div>
+                <div class="help-section"><h3>Narrative Extensions</h3><ul id="helpNarrativeChunks"></ul></div>
+                <div class="help-section"><h3>Conceptual Add-ons</h3><ul id="helpConceptualChunks"></ul></div>
+                <div class="help-section"><h3>Shapes (H - Highlight)</h3><ul id="helpShapes"></ul></div>
+                <div class="help-section"><h3>Color Tags (H - Highlight)</h3><ul id="helpColors"></ul></div>
+                 <div class="help-section">
+                    <h3>Usage &amp; Donation</h3>
+                    <p class="mb-2">This application is free for personal use. If you find it valuable, please consider supporting its development with a donation. Thank you!</p>
+                    <a href="https://ko-fi.com/thorstenbecker" target="_blank" class="btn btn-donate mt-2 mb-3" style="text-decoration: none;">
+                         Donate on Ko-fi
+                    </a>
+                    <p class="mt-3">Any other use requires a license. Please reach out to me at <a href="mailto:hello@thorstenbecker.de" class="text-blue-600 hover:underline">hello@thorstenbecker.de</a> to inquire.</p>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end"><button id="closeHelpBtn" class="btn btn-primary">OK</button></div>
+        </div>
+    </div>
+
+    <!-- Generic Message Modal -->
+    <div id="messageModal" class="modal hidden">
+        <div class="modal-content max-w-lg">
+            <h2 id="messageTitle" class="text-xl font-semibold mb-3">Message</h2>
+            <div id="messageText" class="mb-4 text-sm"></div>
+            <div id="messageButtons" class="flex justify-end"></div>
+        </div>
+    </div>
+
+    <!-- File Input for Loading -->
+    <input type="file" id="fileLoadInput" class="hidden" accept=".json,application/json">
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- Constants ---
+        const CHUNK_TYPES = { core: [ { tag: "#central", description: "The seed thought, core concept" }, { tag: "#essential", description: "Key supporting points or moments" }, { tag: "#expanded", description: "Deeper exploration, examples, nuance" }, { tag: "#supportive", description: "Details, quotes, sensory notes" }, { tag: "#transition", description: "Bridge between sections or ideas" }, { tag: "#loopback", description: "Refers to another chunk, prior note, or core concept" }, { tag: "#conclusive", description: "Ending remarks, reflection, resolution" } ], optional: [ { tag: "#contextual", description: "Background information, historical context, or literature review content" }, { tag: "#counterpoint", description: "Opposing viewpoints, limitations, or challenges to the central idea" }, { tag: "#application", description: "Practical implications, 'how-to' elements, or real-world relevance" } ], narrative: [ { tag: "#temporal", description: "Indicates a passage of time (e.g., 'Later that evening…')" }, { tag: "#spatial", description: "Marks a location change (e.g., 'Across the city…')" }, { tag: "#spatiotemporal", description: "Combines time and location shift (e.g., 'Meanwhile, in Tokyo…')" }, { tag: "#flashback", description: "Indicates a past event or memory outside the main timeline" } ], conceptual: [ { tag: "#dreamlike", description: "Marks dream sequences, hallucinations, or altered states" }, { tag: "#perspective", description: "Indicates a shift in point of view or narrative lens" } ] };
+        const ALL_CHUNK_TYPES = Object.values(CHUNK_TYPES).flat();
+        const SHAPES = [ { name: "Circle", symbol: "◯", meaning: "Core, self, central focus, inner truth" }, { name: "Square", symbol: "▢", meaning: "Structure, foundation, argument" }, { name: "Triangle", symbol: "△", meaning: "Change, direction, movement, shift" }, { name: "Vertical Bars", symbol: "‖", meaning: "Parallel thought, tension, opposition" }, { name: "Horizontal Bars", symbol: "=", meaning: "Harmony, balance, synthesis" }, { name: "Parallelogram", symbol: "▱", meaning: "Container, segment, scene" }, { name: "Diamond", symbol: "◇", meaning: "Insight, key moment, crystallization" }, { name: "(Hook) Arrow", symbol: "⤣", meaning: "Transition, liminality, unstable ground" }, { name: "Exclamation Mark", symbol: "!", meaning: "Emphasis, resonance, punctuation of thought" } ];
+        const COLORS = [ { name: "Red", symbol: "🔴", essence: "Tension, urgency, conflict", tailwindClass: "text-red-500" }, { name: "Blue", symbol: "🔵", essence: "Calm, stability, reflection", tailwindClass: "text-blue-500" }, { name: "Green", symbol: "🟢", essence: "Growth, potential, harmony", tailwindClass: "text-green-500" }, { name: "Yellow", symbol: "🟡", essence: "Curiosity, clarity, newness", tailwindClass: "text-yellow-400" }, { name: "Purple", symbol: "🟣", essence: "Depth, mystery, inner insight", tailwindClass: "text-purple-500" }, { name: "Grey", symbol: "🩶", essence: "Neutrality, logic, stepping back", tailwindClass: "text-gray-500" }, { name: "Black", symbol: "⚫", essence: "Finality, anchor, gravitas", tailwindClass: "text-black" }, { name: "White", symbol: "⚪", essence: "Openness, undefined, exploratory", tailwindClass: "text-gray-300" } ];
+        const ICON_PENCIL_EDIT = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>`;
+        const ICON_LINK = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>`;
+        const ICON_UNLINK = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244m-9.951-2.206a4.5 4.5 0 006.364-6.364L9.65 3.65m-3.069 3.069L3.5 9.787m0 0L1.454 7.742M3.5 9.787l2.046 2.046M3 3l18 18" /></svg>`;
+        const ICON_LINKING_ACTIVE = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="animate-pulse"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>`;
+        const ICON_DELETE = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>`;
+        const ICON_AI_SPARKLE = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.25 10.5l-1.5-1.5 1.5-1.5 1.5 1.5-1.5 1.5ZM16.5 3.75l-1.5-1.5 1.5-1.5 1.5 1.5-1.5 1.5Z" /></svg>`;
+
+        // --- DOM Elements Cache ---
+        const noteCanvasContainer = document.getElementById('noteCanvasContainer');
+        const transformContainer = document.getElementById('transformContainer');
+        const svgCanvas = document.getElementById('svgCanvas');
+        const noteCanvas = document.getElementById('noteCanvas');
+        const addChunkBtn = document.getElementById('addChunkBtn');
+        const shuffleChunksBtn = document.getElementById('shuffleChunksBtn');
+        const clearCanvasBtn = document.getElementById('clearCanvasBtn');
+        const undoDeleteBtn = document.getElementById('undoDeleteBtn');
+        const chunkCountDisplay = document.getElementById('chunkCountDisplay');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const zoomResetBtn = document.getElementById('zoomResetBtn');
+        // Add Chunk Modal
+        const addChunkModal = document.getElementById('addChunkModal');
+        const chunkTypeSelect = document.getElementById('chunkTypeSelect');
+        const chunkShapeSelect = document.getElementById('chunkShapeSelect');
+        const chunkColorSelect = document.getElementById('chunkColorSelect');
+        const confirmAddChunkBtn = document.getElementById('confirmAddChunkBtn');
+        const cancelAddChunkBtn = document.getElementById('cancelAddChunkBtn');
+        // Edit Chunk Modal
+        const editChunkModal = document.getElementById('editChunkModal');
+        const editingChunkIdInput = document.getElementById('editingChunkId');
+        const editChunkTypeSelect = document.getElementById('editChunkTypeSelect');
+        const editChunkShapeSelect = document.getElementById('editChunkShapeSelect');
+        const editChunkColorSelect = document.getElementById('editChunkColorSelect');
+        const confirmEditChunkBtn = document.getElementById('confirmEditChunkBtn');
+        const cancelEditChunkBtn = document.getElementById('cancelEditChunkBtn');
+        // AI Modals
+        const summarizeBtn = document.getElementById('summarizeBtn');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const settingsModal = document.getElementById('settingsModal');
+        const geminiApiKeyInput = document.getElementById('geminiApiKeyInput');
+        const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+        const cancelSettingsBtn = document.getElementById('cancelSettingsBtn');
+        const aiActionModal = document.getElementById('aiActionModal');
+        const aiPromptTextarea = document.getElementById('aiPromptTextarea');
+        const aiActionGenerateBtn = document.getElementById('aiActionGenerateBtn');
+        const aiActionSuggestNextBtn = document.getElementById('aiActionSuggestNextBtn');
+        const cancelAiActionBtn = document.getElementById('cancelAiActionBtn');
+        const closeAiActionModalBtn = document.getElementById('closeAiActionModalBtn');
+        const closeSettingsModalBtn = document.getElementById('closeSettingsModalBtn');
+        // Help Modal
+        const helpBtn = document.getElementById('helpBtn');
+        const helpModal = document.getElementById('helpModal');
+        const closeHelpBtn = document.getElementById('closeHelpBtn');
+        const closeHelpModalSpan = document.getElementById('closeHelpModalSpan');
+        // Save/Load/Export
+        const saveBtn = document.getElementById('saveBtn');
+        const loadBtn = document.getElementById('loadBtn');
+        const fileLoadInput = document.getElementById('fileLoadInput');
+        const exportBtn = document.getElementById('exportBtn');
+        const exportDropdown = document.getElementById('exportDropdown');
+        const exportTxtBtn = document.getElementById('exportTxtBtn');
+        const exportHtmlBtn = document.getElementById('exportHtmlBtn');
+        const exportMdBtn = document.getElementById('exportMdBtn');
+        // Message Modal
+        const messageModal = document.getElementById('messageModal');
+        const messageTitle = document.getElementById('messageTitle');
+        const messageText = document.getElementById('messageText');
+        const messageButtons = document.getElementById('messageButtons');
+        
+        // Add click-outside-to-close behavior to all modals
+        [addChunkModal, editChunkModal, helpModal, messageModal, aiActionModal, settingsModal].forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    hideModal(modal);
+                }
+            });
+        });
+
+        // --- App State ---
+        let chunks = [];
+        let chunksMap = new Map();
+        let highestZIndex = 1;
+        let draggedChunk = null;
+        let resizingChunk = null;
+        let interactionStartX = 0, interactionStartY = 0;
+        let offsetX = 0, offsetY = 0;
+        let startX = 0, startY = 0, startWidth = 0, startHeight = 0;
+        let selectedChunkId = null;
+        let linkingMode = false;
+        let linkingSourceChunkId = null;
+        let lastDeletedChunk = null;
+        let geminiApiKey = null;
+        let activeAiChunkId = null;
+
+        let scale = 1;
+        let translateX = 0;
+        let translateY = 0;
+        const MIN_SCALE = 0.1;
+        const MAX_SCALE = 3.0;
+        const ZOOM_SENSITIVITY = 0.001;
+
+        let currentAction = null;
+        let panStartX = 0, panStartY = 0;
+        let initialPinchDistance = null;
+        let transformUpdateQueued = false;
+
+        // --- Utility Functions ---
+        function generateId() { return 'chunk-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9); }
+        function showModal(modalElement) { modalElement.classList.remove('hidden'); }
+        function hideModal(modalElement) { modalElement.classList.add('hidden'); }
+
+        function showMessage(title, text, buttonsConfig = [{ text: 'OK', class: 'btn-primary', action: () => hideModal(messageModal) }]) {
+            messageTitle.textContent = title;
+            messageText.innerHTML = text; // Use innerHTML to allow links
+            messageButtons.innerHTML = '';
+            buttonsConfig.forEach(btnConfig => {
+                const button = document.createElement('button');
+                button.className = `btn ${btnConfig.class || 'btn-secondary'}`;
+                button.textContent = btnConfig.text;
+                button.onclick = () => {
+                    if (btnConfig.action) btnConfig.action();
+                    if (!btnConfig.noHide) hideModal(messageModal);
+                };
+                messageButtons.appendChild(button);
+            });
+            showModal(messageModal);
+        }
+
+        function updateChunkCounter() {
+            chunkCountDisplay.textContent = `Chunks: ${chunks.length}`;
+        }
+
+        function formatGroupLabel(key) { return key.charAt(0).toUpperCase() + key.slice(1) + " Chunks"; }
+
+        function populateSelectWithOptions(selectElement, optionsArray, currentValue, groups = null, groupLabelFormatterFn = null) {
+            selectElement.innerHTML = '';
+            if (groups && groupLabelFormatterFn) {
+                 for (const groupKey in groups) {
+                    if (groups.hasOwnProperty(groupKey)) {
+                        const groupItems = groups[groupKey];
+                        const optgroup = document.createElement('optgroup');
+                        optgroup.label = groupLabelFormatterFn(groupKey);
+                        groupItems.forEach(item => {
+                            const option = document.createElement('option');
+                            option.value = item.tag; // Assumes item has 'tag' for value
+                            option.textContent = `${item.tag} - ${item.description}`; // Assumes item has 'description'
+                            if (item.tag === currentValue) option.selected = true;
+                            optgroup.appendChild(option);
+                        });
+                        selectElement.appendChild(optgroup);
+                    }
+                }
+            } else if (optionsArray) {
+                optionsArray.forEach(opt => { // Assumes opt has {value, text}
+                    const option = document.createElement('option');
+                    option.value = opt.value;
+                    option.textContent = opt.text;
+                    if (opt.value === currentValue) option.selected = true;
+                    selectElement.appendChild(option);
+                });
+            }
+        }
+
+
+        // --- Transform and Coordinate Functions ---
+        function applyTransform() {
+            if (!transformUpdateQueued) {
+                transformUpdateQueued = true;
+                requestAnimationFrame(() => {
+                    transformContainer.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+                    svgCanvas.setAttribute('width', String(noteCanvas.scrollWidth));
+                    svgCanvas.setAttribute('height', String(noteCanvas.scrollHeight));
+                    drawConnections();
+                    transformUpdateQueued = false;
+                });
+            }
+        }
+
+        function resetAndCenterView() {
+            scale = 1;
+            const viewportWidth = noteCanvasContainer.clientWidth;
+            const viewportHeight = noteCanvasContainer.clientHeight;
+            const canvasContentWidth = noteCanvas.scrollWidth;
+            const canvasContentHeight = noteCanvas.scrollHeight;
+            translateX = (viewportWidth - canvasContentWidth * scale) / 2;
+            translateY = (viewportHeight - canvasContentHeight * scale) / 2;
+            applyTransform();
+        }
+
+        function screenToWorld(screenX, screenY) {
+            const containerRect = noteCanvasContainer.getBoundingClientRect();
+            const rectLeft = containerRect.left || 0;
+            const rectTop = containerRect.top || 0;
+            const worldX = (screenX - rectLeft - translateX) / scale;
+            const worldY = (screenY - rectTop - translateY) / scale;
+            return { x: worldX, y: worldY };
+        }
+
+        function getPointerCoordinates(e) {
+            if (e.touches && e.touches.length > 0) {
+                return { x: e.touches[0].clientX, y: e.touches[0].clientY, count: e.touches.length };
+            }
+            return { x: e.clientX, y: e.clientY, count: e.buttons === 1 ? 1 : 0 };
+        }
+        
+        // --- Gemini AI Functions ---
+
+        function loadApiKey() {
+            const key = localStorage.getItem('geminiApiKey');
+            if (key) {
+                geminiApiKey = key;
+                geminiApiKeyInput.value = key;
+            }
+        }
+
+        function saveApiKey() {
+            const key = geminiApiKeyInput.value.trim();
+            if (key) {
+                geminiApiKey = key;
+                localStorage.setItem('geminiApiKey', key);
+                showMessage("API Key Saved", "Your Gemini API key has been saved locally.");
+                hideModal(settingsModal);
+            } else {
+                localStorage.removeItem('geminiApiKey');
+                geminiApiKey = null;
+                showMessage("API Key Cleared", "Your API key has been removed.");
+            }
+        }
+
+        async function callGemini(prompt, buttonToLoad) {
+            if (!geminiApiKey) {
+                showMessage("API Key Required", "Please enter your Google AI API key in the Settings modal first.", [
+                    { text: 'Cancel', class: 'btn-secondary' },
+                    { text: 'Open Settings', class: 'btn-primary', action: () => showModal(settingsModal) }
+                ]);
+                return null;
+            }
+
+            if (buttonToLoad) setButtonLoading(buttonToLoad, true);
+
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error?.message || `HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.candidates && data.candidates.length > 0 && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts.length > 0) {
+                     return data.candidates[0].content.parts[0].text;
+                } else {
+                    if(data.candidates && data.candidates[0].finishReason === 'SAFETY') {
+                         throw new Error("The response was blocked due to safety settings. Please adjust your prompt.");
+                    }
+                    throw new Error("Received an empty or invalid response from the AI.");
+                }
+
+            } catch (error) {
+                showMessage("AI Error", `An error occurred: ${error.message}`);
+                console.error("Gemini API call failed:", error);
+                return null;
+            } finally {
+                if (buttonToLoad) setButtonLoading(buttonToLoad, false);
+            }
+        }
+        
+        function openAiModal(chunkId) {
+            if (!geminiApiKey) {
+                showMessage("API Key Required", "Please enter your Google AI API key in the Settings modal first.", [
+                    { text: 'Cancel', class: 'btn-secondary' },
+                    { text: 'Open Settings', class: 'btn-primary', action: () => showModal(settingsModal) }
+                ]);
+                return;
+            }
+            activeAiChunkId = chunkId;
+            aiPromptTextarea.value = '';
+            showModal(aiActionModal);
+            aiPromptTextarea.focus();
+        }
+
+        async function summarizeBoard() {
+            if (chunks.length === 0) {
+                showMessage("Empty Board", "There's nothing on the board to summarize.");
+                return;
+            }
+            const allText = getCombinedText();
+            const prompt = `Please provide a concise, high-level summary of the following notes, which are presented in a specific format. Distill the main themes, key arguments, and overall narrative arc.
+
+NOTES:
+${allText}`;
+
+            const summary = await callGemini(prompt, summarizeBtn);
+            if (summary) {
+                const formattedSummary = summary.replace(/\n/g, '<br>');
+                showMessage("Board Summary", formattedSummary);
+            }
+        }
+        
+        async function handleSuggestNextChunk() {
+            const sourceChunkData = chunksMap.get(activeAiChunkId);
+            if (!sourceChunkData) {
+                showMessage("Error", "Could not find the source chunk to generate a suggestion from.");
+                return;
+            }
+
+            const prompt = `Based on the following text, suggest the content for a new, subsequent note that logically follows it. The new note should be a natural continuation or expansion of the original idea. Provide ONLY the text for the new note itself, without any introductory phrases like 'Here is the suggested content:' or any markdown formatting.
+
+CONTEXT:
+${sourceChunkData.text}`;
+
+            const newText = await callGemini(prompt, aiActionSuggestNextBtn);
+
+            if (newText) {
+                // Default properties for the new AI-suggested chunk
+                const newChunkDetails = {
+                    type: ALL_CHUNK_TYPES.find(ct => ct.tag === "#expanded") || ALL_CHUNK_TYPES[0],
+                    shape: SHAPES.find(s => s.name === "Square") || SHAPES[0],
+                    color: COLORS.find(c => c.name === "Grey") || COLORS[0],
+                };
+
+                const newChunkOptions = {
+                    text: `<p>${newText.replace(/\n/g, '<br>')}</p>`, // basic formatting
+                    x: sourceChunkData.x + sourceChunkData.width + 40,
+                    y: sourceChunkData.y
+                };
+
+                const newChunkData = addChunkToCanvas(newChunkDetails, newChunkOptions);
+
+                // Link the source chunk to the new one, if it's not already linked
+                if (!sourceChunkData.nextChunkId) {
+                    sourceChunkData.nextChunkId = newChunkData.id;
+                }
+                
+                drawConnections();
+                updateSelectedVisuals();
+                hideModal(aiActionModal);
+                showMessage("AI Suggestion", "A new chunk has been created and linked based on your previous note.");
+            }
+        }
+
+
+        // --- Chunk Management & Selection ---
+        function updateChunkHeaderDisplay(chunkId) {
+            const chunkElement = document.getElementById(chunkId);
+            const chunkData = chunksMap.get(chunkId);
+            if (!chunkElement || !chunkData) return;
+
+            const headerTitle = chunkElement.querySelector('.chunk-header-title');
+            if (headerTitle) {
+                const selectedShape = SHAPES.find(s => s.name === chunkData.shapeName);
+                const selectedColor = COLORS.find(c => c.name === chunkData.colorName);
+                headerTitle.innerHTML = `<span class="tag">${chunkData.chunkTypeTag}</span> | <span class="shape-symbol ${selectedColor?.tailwindClass || ''}">${selectedShape?.symbol || ''}</span> ${chunkData.shapeName} | <span class="color-symbol ${selectedColor?.tailwindClass || ''}">${selectedColor?.symbol || ''}</span> ${chunkData.colorName}`;
+            }
+        }
+
+        function updateSelectedVisuals() {
+            document.querySelectorAll('.chorus-chunk').forEach(el => {
+                const chunkData = chunksMap.get(el.id);
+                if (!chunkData) return;
+
+                const isSelected = el.id === selectedChunkId;
+                const isLinkingSource = el.id === linkingSourceChunkId;
+
+                el.classList.toggle('selected-chunk', isSelected && !linkingMode);
+                el.classList.toggle('linking-source-chunk', isLinkingSource && linkingMode);
+
+                const linkButton = el.querySelector('.link-chunk-btn');
+                if (linkButton) {
+                    if (isLinkingSource && linkingMode) {
+                        linkButton.innerHTML = ICON_LINKING_ACTIVE;
+                        linkButton.title = 'Cancel Linking';
+                        linkButton.classList.add('linking-active');
+                    } else if (chunkData.nextChunkId) {
+                        linkButton.innerHTML = ICON_UNLINK;
+                        const targetChunk = chunksMap.get(chunkData.nextChunkId);
+                        linkButton.title = `Unlink from ${targetChunk ? targetChunk.chunkTypeTag : 'chunk'}`;
+                        linkButton.classList.remove('linking-active');
+                    } else {
+                        linkButton.innerHTML = ICON_LINK;
+                        linkButton.title = 'Link to Next Chunk';
+                        linkButton.classList.remove('linking-active');
+                    }
+                }
+            });
+        }
+
+        function selectChunk(chunkId) {
+            selectedChunkId = chunkId;
+            updateSelectedVisuals();
+        }
+
+        function deselectAllChunks() {
+            const wasLinking = linkingMode;
+            if (wasLinking) {
+                cancelLinkingMode(true);
+            }
+            selectedChunkId = null;
+            if (!wasLinking) {
+                updateSelectedVisuals();
+            }
+        }
+
+        function createChunkElement(chunkData) {
+            const chunkDiv = document.createElement('div');
+            chunkDiv.id = chunkData.id;
+            chunkDiv.className = 'chorus-chunk';
+            chunkDiv.style.left = chunkData.x + 'px';
+            chunkDiv.style.top = chunkData.y + 'px';
+            chunkDiv.style.width = chunkData.width + 'px';
+            chunkDiv.style.height = chunkData.height + 'px';
+            chunkDiv.style.zIndex = String(chunkData.zIndex);
+
+            chunkDiv.addEventListener('click', (e) => {
+                const clickedChunkId = chunkData.id;
+                if (linkingMode) {
+                    e.stopPropagation();
+                    if (linkingSourceChunkId && linkingSourceChunkId !== clickedChunkId) {
+                        completeLink(linkingSourceChunkId, clickedChunkId);
+                    } else if (linkingSourceChunkId === clickedChunkId) {
+                        if (!e.target.closest('.chunk-action-btn')) {
+                            cancelLinkingMode(false);
+                        }
+                    }
+                    return;
+                }
+                const isInteractiveElement = e.target.closest('.chunk-action-btn') || // Includes edit, link, delete
+                                           e.target.closest('.chunk-content') ||
+                                           e.target.closest('.resize-handle');
+                if (!isInteractiveElement) {
+                    selectChunk(clickedChunkId);
+                }
+            });
+
+            const header = document.createElement('div');
+            header.className = 'chunk-header';
+            header.addEventListener('mousedown', onInteractionStart);
+            header.addEventListener('touchstart', onInteractionStart, { passive: false });
+
+            const headerTitle = document.createElement('span');
+            headerTitle.className = 'chunk-header-title';
+            const initialShape = SHAPES.find(s => s.name === chunkData.shapeName);
+            const initialColor = COLORS.find(c => c.name === chunkData.colorName);
+            headerTitle.innerHTML = `<span class="tag">${chunkData.chunkTypeTag}</span> | <span class="shape-symbol ${initialColor?.tailwindClass || ''}">${initialShape?.symbol || ''}</span> ${chunkData.shapeName} | <span class="color-symbol ${initialColor?.tailwindClass || ''}">${initialColor?.symbol || ''}</span> ${chunkData.colorName}`;
+
+
+            const actionsContainer = document.createElement('div'); actionsContainer.className = 'chunk-actions';
+
+            // AI Button
+            const aiBtn = document.createElement('button');
+            aiBtn.className = 'chunk-action-btn ai-chunk-btn';
+            aiBtn.title = 'AI Assistant';
+            aiBtn.innerHTML = ICON_AI_SPARKLE;
+            aiBtn.addEventListener('click', (e) => {
+                e.preventDefault(); e.stopPropagation();
+                openAiModal(chunkData.id);
+            });
+
+            // Edit Button
+            const editBtn = document.createElement('button');
+            editBtn.className = 'chunk-action-btn edit-chunk-btn';
+            editBtn.title = 'Edit Chunk Properties';
+            editBtn.innerHTML = ICON_PENCIL_EDIT;
+            editBtn.addEventListener('click', (e) => {
+                e.preventDefault(); e.stopPropagation();
+                openEditChunkModal(chunkData.id);
+            });
+
+            // Link Button
+            const linkBtn = document.createElement('button');
+            linkBtn.className = 'chunk-action-btn link-chunk-btn';
+            linkBtn.innerHTML = ICON_LINK; // Initial icon, will be updated by updateSelectedVisuals
+            const handleLinkButtonAction = (e) => {
+                e.preventDefault(); e.stopPropagation();
+                const currentChunkData = chunksMap.get(chunkData.id);
+                if (!currentChunkData) return;
+
+                if (linkingMode && linkingSourceChunkId === currentChunkData.id) {
+                    cancelLinkingMode(false);
+                } else if (currentChunkData.nextChunkId) {
+                    const targetChunk = chunksMap.get(currentChunkData.nextChunkId);
+                    showMessage("Unlink Chunk", `This chunk is linked to: ${targetChunk?.chunkTypeTag || 'another chunk'}.<br>Do you want to remove this link?`, [ { text: 'Cancel', class: 'btn-secondary' }, { text: 'Unlink', class: 'btn-primary', action: () => { currentChunkData.nextChunkId = null; drawConnections(); updateSelectedVisuals(); }} ]);
+                } else {
+                    startLinkingMode(currentChunkData.id);
+                }
+            };
+            linkBtn.addEventListener('click', handleLinkButtonAction);
+            linkBtn.addEventListener('touchend', handleLinkButtonAction);
+
+            // Delete Button
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'chunk-action-btn delete-chunk-btn';
+            deleteBtn.title = 'Delete Chunk';
+            deleteBtn.innerHTML = ICON_DELETE;
+            const handleDeleteButtonAction = (e) => {
+                e.preventDefault(); e.stopPropagation();
+                deleteChunk(chunkData.id);
+            };
+            deleteBtn.addEventListener('click', handleDeleteButtonAction);
+            deleteBtn.addEventListener('touchend', handleDeleteButtonAction);
+
+            actionsContainer.appendChild(aiBtn); // Add AI button first
+            actionsContainer.appendChild(editBtn);
+            actionsContainer.appendChild(linkBtn);
+            actionsContainer.appendChild(deleteBtn);
+            header.appendChild(headerTitle);
+            header.appendChild(actionsContainer);
+
+            const content = document.createElement('div');
+            content.className = 'chunk-content';
+            content.contentEditable = true;
+            content.innerHTML = chunkData.text;
+            content.addEventListener('input', () => {
+                const currentChunkData = chunksMap.get(chunkDiv.id);
+                if (currentChunkData) currentChunkData.text = content.innerHTML;
+            });
+            content.addEventListener('focus', () => {
+                highestZIndex++;
+                chunkDiv.style.zIndex = String(highestZIndex);
+                const currentChunkData = chunksMap.get(chunkDiv.id);
+                if (currentChunkData) currentChunkData.zIndex = highestZIndex;
+                if (!linkingMode) selectChunk(chunkData.id);
+            });
+
+            const resizeHandle = document.createElement('div');
+            resizeHandle.className = 'resize-handle';
+            resizeHandle.addEventListener('mousedown', onInteractionStart);
+            resizeHandle.addEventListener('touchstart', onInteractionStart, { passive: false });
+
+            chunkDiv.appendChild(header); chunkDiv.appendChild(content); chunkDiv.appendChild(resizeHandle);
+            noteCanvas.appendChild(chunkDiv);
+            updateChunkHeaderDisplay(chunkData.id); // Ensure header is correctly rendered with fresh data
+            updateSelectedVisuals(); // Ensure new chunk's selection and link button state is correct
+            return chunkDiv;
+        }
+
+        function deleteChunk(chunkId) {
+            const chunkIndex = chunks.findIndex(c => c.id === chunkId);
+            if (chunkIndex > -1) {
+                lastDeletedChunk = JSON.parse(JSON.stringify(chunks[chunkIndex]));
+                chunks.splice(chunkIndex, 1);
+                chunksMap.delete(chunkId);
+                undoDeleteBtn.disabled = false;
+            }
+            if (selectedChunkId === chunkId) deselectAllChunks();
+            if (linkingSourceChunkId === chunkId) cancelLinkingMode(false);
+
+            chunks.forEach(chunk => {
+                if (chunk.nextChunkId === chunkId) {
+                    chunk.nextChunkId = null;
+                }
+            });
+
+            const chunkElement = document.getElementById(chunkId);
+            if (chunkElement) noteCanvas.removeChild(chunkElement);
+            drawConnections();
+            updateChunkCounter();
+        }
+
+        function undoDeleteLastChunk() {
+            if (lastDeletedChunk) {
+                if (chunksMap.has(lastDeletedChunk.id)) {
+                    showMessage("Undo Failed", "A chunk with the same ID already exists. Cannot undo.");
+                    lastDeletedChunk = null; undoDeleteBtn.disabled = true; return;
+                }
+                chunks.push(lastDeletedChunk);
+                chunksMap.set(lastDeletedChunk.id, lastDeletedChunk);
+                createChunkElement(lastDeletedChunk);
+                drawConnections();
+                selectChunk(lastDeletedChunk.id);
+                lastDeletedChunk = null; undoDeleteBtn.disabled = true;
+                showMessage("Undo Successful", "The last deleted chunk has been restored.");
+                updateChunkCounter();
+            } else {
+                showMessage("Nothing to Undo", "No chunk deletion to undo.");
+            }
+        }
+
+        function addChunkToCanvas(chunkDetails, options = {}) {
+            const viewportRect = noteCanvasContainer.getBoundingClientRect();
+            const defaultWorldPos = screenToWorld(
+                (viewportRect.left || 0) + (viewportRect.width || window.innerWidth) / 2,
+                (viewportRect.top || 0) + (viewportRect.height || window.innerHeight) / 4
+            );
+
+            const newChunkData = {
+                id: generateId(),
+                chunkTypeTag: chunkDetails.type.tag,
+                shapeName: chunkDetails.shape.name,
+                shapeSymbol: chunkDetails.shape.symbol,
+                colorName: chunkDetails.color.name,
+                colorSymbol: chunkDetails.color.symbol,
+                colorTailwindClass: chunkDetails.color.tailwindClass,
+                text: options.text || 'New chunk... Start typing!',
+                x: options.x !== undefined ? options.x : Math.max(0, defaultWorldPos.x),
+                y: options.y !== undefined ? options.y : Math.max(0, defaultWorldPos.y),
+                width: 250,
+                height: 150,
+                zIndex: ++highestZIndex,
+                nextChunkId: null
+            };
+
+            chunks.push(newChunkData);
+            chunksMap.set(newChunkData.id, newChunkData);
+            createChunkElement(newChunkData);
+            selectChunk(newChunkData.id);
+            drawConnections();
+            updateChunkCounter();
+            return newChunkData;
+        }
+
+        function shuffleChunks() {
+            if (chunks.length === 0) {
+                showMessage("Nothing to Shuffle", "There are no chunks on the canvas to shuffle.");
+                return;
+            }
+            const canvasWidth = noteCanvas.scrollWidth;
+            const canvasHeight = noteCanvas.scrollHeight;
+
+            // Define a shuffling area, e.g., the central 40% of the canvas
+            const shuffleAreaFactor = 0.4;
+            const shuffleAreaWidth = canvasWidth * shuffleAreaFactor;
+            const shuffleAreaHeight = canvasHeight * shuffleAreaFactor;
+
+            // Calculate the top-left corner of this central area
+            const shuffleAreaX = (canvasWidth - shuffleAreaWidth) / 2;
+            const shuffleAreaY = (canvasHeight - shuffleAreaHeight) / 2;
+
+            chunks.forEach(chunkData => {
+                const chunkElement = document.getElementById(chunkData.id);
+                if (chunkElement) {
+                    const chunkWidth = parseFloat(chunkElement.style.width);
+                    const chunkHeight = parseFloat(chunkElement.style.height);
+                    
+                    // Ensure the random position is within the shuffle area,
+                    // accounting for the chunk's own size so it doesn't spill out.
+                    const newX = shuffleAreaX + Math.random() * (shuffleAreaWidth - chunkWidth);
+                    const newY = shuffleAreaY + Math.random() * (shuffleAreaHeight - chunkHeight);
+                    
+                    // Update chunk data and element style
+                    chunkData.x = Math.max(0, newX); // Still good practice to keep this
+                    chunkData.y = Math.max(0, newY);
+                    chunkElement.style.left = chunkData.x + 'px';
+                    chunkElement.style.top = chunkData.y + 'px';
+                }
+            });
+            drawConnections();
+            showMessage("Chunks Shuffled", "All chunks have been repositioned near the center.");
+        }
+
+
+        // --- Linking Logic ---
+        function startLinkingMode(sourceId) {
+            linkingMode = true;
+            linkingSourceChunkId = sourceId;
+            document.body.classList.add('linking-mode');
+            selectedChunkId = sourceId;
+            updateSelectedVisuals();
+        }
+        function cancelLinkingMode(cancelledByDeselectAll = false) {
+            linkingMode = false;
+            const prevSourceId = linkingSourceChunkId;
+            linkingSourceChunkId = null;
+            document.body.classList.remove('linking-mode');
+            if (cancelledByDeselectAll) {
+                selectedChunkId = null;
+            } else if (prevSourceId) {
+                selectChunk(prevSourceId);
+            }
+            updateSelectedVisuals();
+        }
+        function completeLink(sourceId, targetId) {
+            const sourceChunk = chunksMap.get(sourceId);
+            const targetChunk = chunksMap.get(targetId);
+            if (sourceChunk && targetChunk) {
+                if (targetChunk.nextChunkId === sourceId) {
+                    targetChunk.nextChunkId = null;
+                }
+                sourceChunk.nextChunkId = targetId;
+            }
+            const wasLinkingSource = linkingSourceChunkId;
+            cancelLinkingMode(false);
+            drawConnections();
+            if (wasLinkingSource) {
+                selectChunk(wasLinkingSource);
+            }
+            updateSelectedVisuals();
+        }
+
+        function getIntersectionPointWithRect(rect, internalPoint, externalPoint) {
+            const p1 = internalPoint; const p2 = externalPoint;
+            const dx = p2.x - p1.x; const dy = p2.y - p1.y;
+            if (dx === 0 && dy === 0) return p1;
+
+            let tMin = Infinity; let intersection = null;
+            const rectRight = rect.x + rect.width;
+            const rectBottom = rect.y + rect.height;
+
+            if (dx !== 0) { const t = (rect.x - p1.x) / dx; if (t > 1e-6) { const y = p1.y + t * dy; if (y >= rect.y && y <= rectBottom) { if (t < tMin) { tMin = t; intersection = { x: rect.x, y: y }; } } } }
+            if (dx !== 0) { const t = (rectRight - p1.x) / dx; if (t > 1e-6) { const y = p1.y + t * dy; if (y >= rect.y && y <= rectBottom) { if (t < tMin) { tMin = t; intersection = { x: rectRight, y: y }; } } } }
+            if (dy !== 0) { const t = (rect.y - p1.y) / dy; if (t > 1e-6) { const x = p1.x + t * dx; if (x >= rect.x && x <= rectRight) { if (t < tMin) { tMin = t; intersection = { x: x, y: rect.y }; } } } }
+            if (dy !== 0) { const t = (rectBottom - p1.y) / dy; if (t > 1e-6) { const x = p1.x + t * dx; if (x >= rect.x && x <= rectRight) { if (t < tMin) { tMin = t; intersection = { x: x, y: rectBottom }; } } } }
+
+            return intersection || p1;
+        }
+
+        let svgDefsCreated = false;
+        function ensureSvgDefs() {
+            if (svgDefsCreated) return;
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+            marker.setAttribute('id', 'arrowhead');
+            marker.setAttribute('viewBox', '0 0 10 10');
+            marker.setAttribute('refX', '10');
+            marker.setAttribute('refY', '5');
+            marker.setAttribute('markerUnits', 'strokeWidth');
+            marker.setAttribute('markerWidth', '6');
+            marker.setAttribute('markerHeight', '5');
+            marker.setAttribute('orient', 'auto');
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+            path.classList.add('arrow-head');
+            marker.appendChild(path);
+            defs.appendChild(marker);
+            svgCanvas.appendChild(defs);
+            svgDefsCreated = true;
+        }
+
+        function drawConnections() {
+            ensureSvgDefs();
+
+            const existingLines = svgCanvas.querySelectorAll('line');
+            existingLines.forEach(line => line.remove());
+
+            chunks.forEach(sourceChunkData => {
+                if (sourceChunkData.nextChunkId) {
+                    const targetChunkData = chunksMap.get(sourceChunkData.nextChunkId);
+                    if (targetChunkData) {
+                        const sourceEl = document.getElementById(sourceChunkData.id);
+                        const targetEl = document.getElementById(targetChunkData.id);
+                        if (sourceEl && targetEl) {
+                            const sourceRect = { x: sourceEl.offsetLeft, y: sourceEl.offsetTop, width: sourceEl.offsetWidth, height: sourceEl.offsetHeight };
+                            const targetRect = { x: targetEl.offsetLeft, y: targetEl.offsetTop, width: targetEl.offsetWidth, height: targetEl.offsetHeight };
+
+                            const sourceCenter = { x: sourceRect.x + sourceRect.width / 2, y: sourceRect.y + sourceRect.height / 2 };
+                            const targetCenter = { x: targetRect.x + targetRect.width / 2, y: targetRect.y + targetRect.height / 2 };
+
+                            if (sourceCenter.x === targetCenter.x && sourceCenter.y === targetCenter.y) return;
+
+                            const startPoint = getIntersectionPointWithRect(sourceRect, sourceCenter, targetCenter);
+                            const endPoint = getIntersectionPointWithRect(targetRect, targetCenter, sourceCenter);
+
+                            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            line.setAttribute('x1', String(startPoint.x)); line.setAttribute('y1', String(startPoint.y));
+                            line.setAttribute('x2', String(endPoint.x)); line.setAttribute('y2', String(endPoint.y));
+                            line.classList.add('connecting-line');
+                            line.setAttribute('marker-end', 'url(#arrowhead)');
+                            svgCanvas.appendChild(line);
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- Interaction Logic (Drag, Resize, Pan, Zoom) ---
+        function onInteractionStart(e) {
+            const isTouchEvent = e.type.startsWith('touch');
+            if (isTouchEvent && e.touches.length > 1) return;
+            if (isTouchEvent) e.preventDefault();
+
+            const pointer = getPointerCoordinates(e);
+            interactionStartX = pointer.x;
+            interactionStartY = pointer.y;
+
+            if (e.target.classList.contains('resize-handle')) {
+                currentAction = 'resize';
+                resizingChunk = e.target.closest('.chorus-chunk');
+                if (!resizingChunk) { currentAction = null; return; }
+                e.stopPropagation();
+                selectChunk(resizingChunk.id);
+
+                highestZIndex++;
+                resizingChunk.style.zIndex = String(highestZIndex);
+                const chunkData = chunksMap.get(resizingChunk.id);
+                if(chunkData) chunkData.zIndex = highestZIndex;
+
+                startX = pointer.x;
+                startY = pointer.y;
+                startWidth = parseFloat(resizingChunk.style.width);
+                startHeight = parseFloat(resizingChunk.style.height);
+
+            } else if (e.target.closest('.chunk-header')) {
+                 if (e.target.closest('.chunk-action-btn')) return;
+                currentAction = 'drag';
+                draggedChunk = e.target.closest('.chorus-chunk');
+                if (!draggedChunk) { currentAction = null; return; }
+                e.stopPropagation();
+                selectChunk(draggedChunk.id);
+
+                highestZIndex++;
+                draggedChunk.style.zIndex = String(highestZIndex);
+                const chunkData = chunksMap.get(draggedChunk.id);
+                if(chunkData) chunkData.zIndex = highestZIndex;
+
+                const worldPointer = screenToWorld(pointer.x, pointer.y);
+                offsetX = worldPointer.x - parseFloat(draggedChunk.style.left);
+                offsetY = worldPointer.y - parseFloat(draggedChunk.style.top);
+            }
+
+            if (currentAction === 'drag' || currentAction === 'resize') {
+                document.addEventListener('mousemove', onInteractionMove);
+                document.addEventListener('mouseup', onInteractionEnd);
+                document.addEventListener('touchmove', onInteractionMove, { passive: false });
+                document.addEventListener('touchend', onInteractionEnd);
+            }
+        }
+
+        let interactionMoveQueued = false;
+        function onInteractionMove(e) {
+            const isTouchEvent = e.type.startsWith('touch');
+            if (!currentAction) return;
+            if (isTouchEvent) e.preventDefault();
+
+            if (interactionMoveQueued) return;
+            interactionMoveQueued = true;
+
+            requestAnimationFrame(() => {
+                const pointer = getPointerCoordinates(e);
+                if (currentAction === 'drag' && draggedChunk) {
+                    const worldPointer = screenToWorld(pointer.x, pointer.y);
+                    let newWorldX = worldPointer.x - offsetX;
+                    let newWorldY = worldPointer.y - offsetY;
+
+                    const canvasWorldWidth = noteCanvas.scrollWidth;
+                    const canvasWorldHeight = noteCanvas.scrollHeight;
+                    const chunkWidth = parseFloat(draggedChunk.style.width);
+                    const chunkHeight = parseFloat(draggedChunk.style.height);
+
+                    newWorldX = Math.max(0, Math.min(newWorldX, canvasWorldWidth - chunkWidth));
+                    newWorldY = Math.max(0, Math.min(newWorldY, canvasWorldHeight - chunkHeight));
+
+                    draggedChunk.style.left = newWorldX + 'px';
+                    draggedChunk.style.top = newWorldY + 'px';
+                    drawConnections();
+
+                } else if (currentAction === 'resize' && resizingChunk) {
+                    const deltaScreenX = pointer.x - startX;
+                    const deltaScreenY = pointer.y - startY;
+
+                    let newWidth = startWidth + (deltaScreenX / scale);
+                    let newHeight = startHeight + (deltaScreenY / scale);
+
+                    newWidth = Math.max(100, newWidth);
+                    newHeight = Math.max(80, newHeight);
+
+                    const chunkCurrentX = parseFloat(resizingChunk.style.left);
+                    const chunkCurrentY = parseFloat(resizingChunk.style.top);
+                    const canvasWorldWidth = noteCanvas.scrollWidth;
+                    const canvasWorldHeight = noteCanvas.scrollHeight;
+
+                    if (chunkCurrentX + newWidth > canvasWorldWidth) newWidth = canvasWorldWidth - chunkCurrentX;
+                    if (chunkCurrentY + newHeight > canvasWorldHeight) newHeight = canvasWorldHeight - chunkCurrentY;
+
+                    resizingChunk.style.width = newWidth + 'px';
+                    resizingChunk.style.height = newHeight + 'px';
+                    drawConnections();
+
+                } else if (currentAction === 'pan') {
+                    translateX = pointer.x - panStartX;
+                    translateY = pointer.y - panStartY;
+                    applyTransform();
+                }
+                interactionMoveQueued = false;
+            });
+        }
+
+        function onInteractionEnd(e) {
+            if (currentAction === 'drag' && draggedChunk) {
+                const chunkData = chunksMap.get(draggedChunk.id);
+                if (chunkData) {
+                    chunkData.x = parseFloat(draggedChunk.style.left);
+                    chunkData.y = parseFloat(draggedChunk.style.top);
+                }
+                draggedChunk = null;
+            } else if (currentAction === 'resize' && resizingChunk) {
+                const chunkData = chunksMap.get(resizingChunk.id);
+                if (chunkData) {
+                    chunkData.width = parseFloat(resizingChunk.style.width);
+                    chunkData.height = parseFloat(resizingChunk.style.height);
+                }
+                resizingChunk = null;
+            } else if (currentAction === 'pan') {
+                noteCanvasContainer.classList.remove('panning');
+            }
+
+            if (currentAction !== 'pinch-zoom') {
+                currentAction = null;
+            }
+
+            document.removeEventListener('mousemove', onInteractionMove);
+            document.removeEventListener('mouseup', onInteractionEnd);
+            document.removeEventListener('touchmove', onInteractionMove);
+            document.removeEventListener('touchend', onInteractionEnd);
+        }
+
+        noteCanvasContainer.addEventListener('mousedown', (e) => {
+            if (e.target === noteCanvasContainer || e.target === transformContainer || e.target === noteCanvas) {
+                if (linkingMode) {
+                    deselectAllChunks();
+                    return;
+                }
+                currentAction = 'pan';
+                const pointer = getPointerCoordinates(e);
+                panStartX = pointer.x - translateX;
+                panStartY = pointer.y - translateY;
+                noteCanvasContainer.classList.add('panning');
+                document.addEventListener('mousemove', onInteractionMove);
+                document.addEventListener('mouseup', onInteractionEnd);
+            } else if (!e.target.closest('.chorus-chunk') && !e.target.closest('.toolbar') && !e.target.closest('.modal')) {
+                deselectAllChunks();
+            }
+        });
+
+        noteCanvasContainer.addEventListener('touchstart', (e) => {
+            if (e.target === noteCanvasContainer || e.target === transformContainer || e.target === noteCanvas) {
+                if (e.touches.length === 1) {
+                    if (linkingMode) {
+                        deselectAllChunks();
+                        e.preventDefault();
+                        return;
+                    }
+                    e.preventDefault();
+                    currentAction = 'pan';
+                    const pointer = getPointerCoordinates(e);
+                    panStartX = pointer.x - translateX;
+                    panStartY = pointer.y - translateY;
+                    noteCanvasContainer.classList.add('panning');
+                    document.addEventListener('touchmove', onInteractionMove, { passive: false });
+                    document.addEventListener('touchend', onInteractionEnd);
+
+                } else if (e.touches.length === 2) {
+                    e.preventDefault();
+                    currentAction = 'pinch-zoom';
+                    noteCanvasContainer.classList.remove('panning');
+                    const t1 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                    const t2 = { x: e.touches[1].clientX, y: e.touches[1].clientY };
+                    initialPinchDistance = Math.hypot(t1.x - t2.x, t1.y - t2.y);
+                }
+            }  else if (!e.target.closest('.chorus-chunk') && !e.target.closest('.toolbar') && !e.target.closest('.modal')) {
+                deselectAllChunks();
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        noteCanvasContainer.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = noteCanvasContainer.getBoundingClientRect();
+            const mouseX = e.clientX - (rect.left || 0);
+            const mouseY = e.clientY - (rect.top || 0);
+
+            const worldXBeforeZoom = (mouseX - translateX) / scale;
+            const worldYBeforeZoom = (mouseY - translateY) / scale;
+
+            const delta = e.deltaY * ZOOM_SENSITIVITY * -1;
+            let newScale = scale * (1 + delta);
+            newScale = Math.max(MIN_SCALE, Math.min(newScale, MAX_SCALE));
+
+            translateX = mouseX - worldXBeforeZoom * newScale;
+            translateY = mouseY - worldYBeforeZoom * newScale;
+            scale = newScale;
+            applyTransform();
+        }, { passive: false });
+
+        noteCanvasContainer.addEventListener('touchmove', (e) => {
+            if (currentAction === 'pinch-zoom' && e.touches.length === 2) {
+                e.preventDefault();
+                const t1 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                const t2 = { x: e.touches[1].clientX, y: e.touches[1].clientY };
+                const currentPinchDistance = Math.hypot(t1.x - t2.x, t1.y - t2.y);
+                const pinchMidpointScreen = { x: (t1.x + t2.x) / 2, y: (t1.y + t2.y) / 2 };
+
+                if (initialPinchDistance === null) {
+                    initialPinchDistance = currentPinchDistance;
+                    return;
+                }
+
+                const rect = noteCanvasContainer.getBoundingClientRect();
+                const worldMidXBeforeZoom = (pinchMidpointScreen.x - (rect.left || 0) - translateX) / scale;
+                const worldMidYBeforeZoom = (pinchMidpointScreen.y - (rect.top || 0) - translateY) / scale;
+
+                let scaleChange = currentPinchDistance / initialPinchDistance;
+                let newScale = scale * scaleChange;
+                newScale = Math.max(MIN_SCALE, Math.min(newScale, MAX_SCALE));
+
+                translateX = (pinchMidpointScreen.x - (rect.left || 0)) - worldMidXBeforeZoom * newScale;
+                translateY = (pinchMidpointScreen.y - (rect.top || 0)) - worldMidYBeforeZoom * newScale;
+
+                scale = newScale;
+                applyTransform();
+                initialPinchDistance = currentPinchDistance;
+            }
+        }, { passive: false });
+
+        noteCanvasContainer.addEventListener('touchend', (e) => {
+            if (e.touches.length < 2 && currentAction === 'pinch-zoom') {
+                initialPinchDistance = null;
+                currentAction = null;
+            }
+        });
+
+        zoomInBtn.addEventListener('click', () => {
+            const centerRect = noteCanvasContainer.getBoundingClientRect();
+            const centerX = (centerRect.left || 0) + (centerRect.width || window.innerWidth) / 2;
+            const centerY = (centerRect.top || 0) + (centerRect.height || window.innerHeight) / 2;
+            const worldCenter = screenToWorld(centerX, centerY);
+            let newScale = Math.min(MAX_SCALE, scale * 1.25);
+            translateX = centerX - worldCenter.x * newScale;
+            translateY = centerY - worldCenter.y * newScale;
+            scale = newScale;
+            applyTransform();
+        });
+        zoomOutBtn.addEventListener('click', () => {
+            const centerRect = noteCanvasContainer.getBoundingClientRect();
+            const centerX = (centerRect.left || 0) + (centerRect.width || window.innerWidth) / 2;
+            const centerY = (centerRect.top || 0) + (centerRect.height || window.innerHeight) / 2;
+            const worldCenter = screenToWorld(centerX, centerY);
+            let newScale = Math.max(MIN_SCALE, scale / 1.25);
+            translateX = centerX - worldCenter.x * newScale;
+            translateY = centerY - worldCenter.y * newScale;
+            scale = newScale;
+            applyTransform();
+        });
+        zoomResetBtn.addEventListener('click', () => { resetAndCenterView(); });
+
+        // --- UI Event Listeners (Modals, Buttons) ---
+        function populateAddChunkModal() {
+            populateSelectWithOptions(chunkTypeSelect, null, null, CHUNK_TYPES, formatGroupLabel);
+            populateSelectWithOptions(chunkShapeSelect, SHAPES.map(s => ({value: s.name, text: `${s.symbol} ${s.name} - ${s.meaning}`})), SHAPES[0].name);
+            populateSelectWithOptions(chunkColorSelect, COLORS.map(c => ({value: c.name, text: `${c.symbol} ${c.name} - ${c.essence}`})), COLORS[0].name);
+        }
+
+        function openEditChunkModal(chunkId) {
+            const chunkData = chunksMap.get(chunkId);
+            if (!chunkData) return;
+            editingChunkIdInput.value = chunkId;
+
+            populateSelectWithOptions(editChunkTypeSelect, null, chunkData.chunkTypeTag, CHUNK_TYPES, formatGroupLabel);
+            populateSelectWithOptions(editChunkShapeSelect, SHAPES.map(s => ({value: s.name, text: `${s.symbol} ${s.name} - ${s.meaning}`})), chunkData.shapeName);
+            populateSelectWithOptions(editChunkColorSelect, COLORS.map(c => ({value: c.name, text: `${c.symbol} ${c.name} - ${c.essence}`})), chunkData.colorName);
+
+            showModal(editChunkModal);
+        }
+
+        function populateHelpModal() {
+            document.getElementById('helpCoreChunks').innerHTML = CHUNK_TYPES.core.map(c => `<li><code>${c.tag}</code>: ${c.description}</li>`).join('');
+            document.getElementById('helpOptionalChunks').innerHTML = CHUNK_TYPES.optional.map(c => `<li><code>${c.tag}</code>: ${c.description}</li>`).join('');
+            document.getElementById('helpNarrativeChunks').innerHTML = CHUNK_TYPES.narrative.map(c => `<li><code>${c.tag}</code>: ${c.description}</li>`).join('');
+            document.getElementById('helpConceptualChunks').innerHTML = CHUNK_TYPES.conceptual.map(c => `<li><code>${c.tag}</code>: ${c.description}</li>`).join('');
+            document.getElementById('helpShapes').innerHTML = SHAPES.map(s => `<li><strong>${s.symbol} ${s.name}</strong>: ${s.meaning}</li>`).join('');
+            document.getElementById('helpColors').innerHTML = COLORS.map(c => `<li><span class="${c.tailwindClass}">${c.symbol}</span> <strong>${c.name}</strong>: ${c.essence}</li>`).join('');
+        }
+
+        addChunkBtn.addEventListener('click', () => { if(linkingMode) cancelLinkingMode(false); showModal(addChunkModal); });
+        shuffleChunksBtn.addEventListener('click', () => { if(linkingMode) cancelLinkingMode(false); shuffleChunks(); });
+        cancelAddChunkBtn.addEventListener('click', () => hideModal(addChunkModal));
+
+        confirmAddChunkBtn.addEventListener('click', () => {
+            const selectedType = ALL_CHUNK_TYPES.find(ct => ct.tag === chunkTypeSelect.value);
+            const selectedShape = SHAPES.find(s => s.name === chunkShapeSelect.value);
+            const selectedColor = COLORS.find(c => c.name === chunkColorSelect.value);
+
+            if (!selectedType || !selectedShape || !selectedColor) {
+                showMessage('Error', 'Please make a selection for chunk type, shape, and color.');
+                return;
+            }
+            addChunkToCanvas({ type: selectedType, shape: selectedShape, color: selectedColor });
+            hideModal(addChunkModal);
+        });
+
+        confirmEditChunkBtn.addEventListener('click', () => {
+            const chunkId = editingChunkIdInput.value;
+            const chunkData = chunksMap.get(chunkId);
+            if (!chunkData) return;
+
+            const newTypeTag = editChunkTypeSelect.value;
+            const newShapeName = editChunkShapeSelect.value;
+            const newColorName = editChunkColorSelect.value;
+
+            const newType = ALL_CHUNK_TYPES.find(ct => ct.tag === newTypeTag);
+            const newShape = SHAPES.find(s => s.name === newShapeName);
+            const newColor = COLORS.find(c => c.name === newColorName);
+
+            if (!newType || !newShape || !newColor) {
+                showMessage('Error', 'Invalid selection for chunk properties.'); return;
+            }
+
+            chunkData.chunkTypeTag = newType.tag;
+            chunkData.shapeName = newShape.name;
+            chunkData.shapeSymbol = newShape.symbol;
+            chunkData.colorName = newColor.name;
+            chunkData.colorSymbol = newColor.symbol;
+            chunkData.colorTailwindClass = newColor.tailwindClass;
+
+            updateChunkHeaderDisplay(chunkId);
+            hideModal(editChunkModal);
+            updateSelectedVisuals(); // To update link button tooltips if type changed
+        });
+        cancelEditChunkBtn.addEventListener('click', () => hideModal(editChunkModal));
+        
+        // AI and Settings Button Listeners
+        summarizeBtn.addEventListener('click', summarizeBoard);
+        settingsBtn.addEventListener('click', () => showModal(settingsModal));
+        saveSettingsBtn.addEventListener('click', saveApiKey);
+        cancelSettingsBtn.addEventListener('click', () => hideModal(settingsModal));
+        closeSettingsModalBtn.addEventListener('click', () => hideModal(settingsModal));
+
+        cancelAiActionBtn.addEventListener('click', () => hideModal(aiActionModal));
+        closeAiActionModalBtn.addEventListener('click', () => hideModal(aiActionModal));
+        aiActionSuggestNextBtn.addEventListener('click', handleSuggestNextChunk);
+        
+        aiActionGenerateBtn.addEventListener('click', async () => {
+            const promptText = aiPromptTextarea.value.trim();
+            if (!promptText) {
+                showMessage("Prompt Required", "Please enter a prompt for the AI.");
+                return;
+            }
+
+            const chunkData = chunksMap.get(activeAiChunkId);
+            if (!chunkData) {
+                showMessage("Error", "Could not find the active chunk.");
+                return;
+            }
+            
+            const contentDiv = document.getElementById(activeAiChunkId)?.querySelector('.chunk-content');
+            if(!contentDiv) return;
+
+
+            const fullPrompt = `CONTEXT:\n${contentDiv.innerHTML}\n\nPROMPT:\n${promptText}`;
+            
+            const result = await callGemini(fullPrompt, aiActionGenerateBtn);
+
+            if (result !== null) {
+                // Gemini often returns markdown. Convert basic markdown to HTML.
+                let htmlResult = result
+                    .replace(/\n\n/g, '</p><p>')
+                    .replace(/\n/g, '<br>')
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>');
+                htmlResult = `<p>${htmlResult}</p>`;
+
+                contentDiv.innerHTML = htmlResult;
+                chunkData.text = htmlResult; // Save to data model
+                
+                hideModal(aiActionModal);
+                showMessage("Content Updated", "The chunk content has been updated by the AI.");
+            }
+        });
+
+
+        clearCanvasBtn.addEventListener('click', () => {
+            if (linkingMode) cancelLinkingMode(false);
+            if (chunks.length === 0) { showMessage("Canvas Empty", "The canvas is already clear."); return; }
+            showMessage("Confirm Clear", "Are you sure you want to clear the entire canvas? This action cannot be undone.", [
+                { text: 'Cancel', class: 'btn-secondary' },
+                { text: 'Clear Canvas', class: 'btn-danger', action: () => {
+                    renderBoard([]);
+                    showMessage("Canvas Cleared", "All notes and links have been removed.");
+                }}
+            ]);
+        });
+        undoDeleteBtn.addEventListener('click', () => { if (linkingMode) cancelLinkingMode(false); undoDeleteLastChunk(); });
+        helpBtn.addEventListener('click', () => { if(linkingMode) cancelLinkingMode(false); showModal(helpModal); });
+        closeHelpBtn.addEventListener('click', () => hideModal(helpModal));
+        closeHelpModalSpan.addEventListener('click', () => hideModal(helpModal));
+
+        const originalButtonStates = {};
+        function setButtonLoading(button, isLoading) {
+            if (!button) { console.error("setButtonLoading: button is null or undefined"); return; }
+            const buttonId = button.id || `btn-${Math.random()}`; // Ensure button has an ID
+            button.id = buttonId;
+            
+            if (isLoading) {
+                if (!originalButtonStates[buttonId]) { originalButtonStates[buttonId] = button.innerHTML; }
+                button.innerHTML = `<svg class="animate-spin h-5 w-5 spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" style="margin: auto;"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+                button.classList.add('loading'); button.disabled = true;
+            } else {
+                if (originalButtonStates[buttonId] !== undefined) {
+                    button.innerHTML = originalButtonStates[buttonId];
+                    delete originalButtonStates[buttonId];
+                }
+                button.classList.remove('loading'); button.disabled = false;
+            }
+        }
+
+        // --- Save/Load/Export ---
+        function saveDataToFile() {
+            chunks.forEach(chunkData => {
+                const chunkElement = document.getElementById(chunkData.id);
+                if (chunkElement) {
+                    const contentDiv = chunkElement.querySelector('.chunk-content');
+                    if (contentDiv) { chunkData.text = contentDiv.innerHTML; }
+                }
+            });
+            if (chunks.length === 0) { showMessage("Empty Board", "There are no notes to save."); return; }
+            setButtonLoading(saveBtn, true);
+            try {
+                const dataToSave = { chunks: chunks, viewport: { scale: scale, translateX: translateX, translateY: translateY } };
+                const dataStr = JSON.stringify(dataToSave, null, 2);
+                downloadFile(dataStr, 'chorus-notes.json', 'application/json');
+                showMessage('Saved to File', 'Your CHORUS board has been prepared for download.');
+            } catch (error) {
+                showMessage('Save Error', `Could not prepare data for saving: ${error.message}`);
+                console.error("Save error:", error);
+            } finally {
+                setButtonLoading(saveBtn, false);
+            }
+        }
+
+        const loadButtonHandler = () => {
+            if(linkingMode) cancelLinkingMode(false);
+            if (chunks.length > 0) {
+                showMessage("Confirm Load", "Loading a new file will clear any unsaved changes on the current canvas. Are you sure you want to proceed?", [
+                    { text: 'Cancel', class: 'btn-secondary' },
+                    { text: 'Load File', class: 'btn-primary', action: () => fileLoadInput.click() }
+                ]);
+            } else {
+                fileLoadInput.click();
+            }
+        };
+        saveBtn.addEventListener('click', saveDataToFile);
+        loadBtn.addEventListener('click', loadButtonHandler);
+
+        fileLoadInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (file.type !== "application/json") {
+                showMessage("Load Error", "Invalid file type. Please select a .json file.");
+                event.target.value = null;
+                return;
+            }
+            setButtonLoading(loadBtn, true);
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const loadedData = JSON.parse(e.target.result);
+                    if (loadedData && Array.isArray(loadedData.chunks)) {
+                        renderBoard(loadedData.chunks);
+                        if (loadedData.viewport) {
+                            scale = loadedData.viewport.scale || 1;
+                            translateX = loadedData.viewport.translateX || 0;
+                            translateY = loadedData.viewport.translateY || 0;
+                            applyTransform();
+                        } else {
+                            resetAndCenterView();
+                        }
+                        showMessage('Loaded from File', `Successfully loaded notes from ${file.name}.`);
+                    } else {
+                        throw new Error("Invalid file format. Expected 'chunks' array.");
+                    }
+                } catch (error) {
+                    showMessage('Load Error', `Could not load or parse file: ${error.message}.`);
+                    console.error("Load error:", error);
+                } finally {
+                    event.target.value = null;
+                    setButtonLoading(loadBtn, false);
+                }
+            };
+            reader.onerror = () => {
+                showMessage('Load Error', `Error reading file: ${reader.error}`);
+                event.target.value = null;
+                setButtonLoading(loadBtn, false);
+                console.error("File read error:", reader.error);
+            };
+            reader.readAsText(file);
+        });
+
+        function getOrderedChunksForExport() {
+            const localChunkMap = new Map(chunks.map(chunk => {
+                 const newChunk = JSON.parse(JSON.stringify(chunk));
+                 const chunkEl = document.getElementById(newChunk.id);
+                 if (chunkEl) {
+                     const contentDiv = chunkEl.querySelector('.chunk-content');
+                     if (contentDiv) newChunk.text = contentDiv.innerHTML;
+                 }
+                 return [newChunk.id, newChunk];
+            }));
+            const orderedChunks = [];
+            const visited = new Set();
+            const inCurrentPath = new Set();
+
+            const allTargetIds = new Set();
+            localChunkMap.forEach(chunk => {
+                if (chunk.nextChunkId) allTargetIds.add(chunk.nextChunkId);
+            });
+            const startNodes = [];
+            localChunkMap.forEach(chunk => {
+                if (!allTargetIds.has(chunk.id)) startNodes.push(chunk);
+            });
+            startNodes.sort((a,b) => a.y === b.y ? a.x - b.x : a.y - b.y);
+
+
+            function traverse(chunkId) {
+                if (!chunkId || visited.has(chunkId)) return;
+                if (inCurrentPath.has(chunkId)) { console.warn("Cycle detected involving chunk:", chunkId, ". Breaking traversal for this path."); return; }
+
+                visited.add(chunkId);
+                inCurrentPath.add(chunkId);
+                const chunk = localChunkMap.get(chunkId);
+                if (chunk) {
+                    orderedChunks.push(chunk);
+                    if (chunk.nextChunkId) {
+                        traverse(chunk.nextChunkId);
+                    }
+                }
+                inCurrentPath.delete(chunkId);
+            }
+
+            startNodes.forEach(startNode => traverse(startNode.id));
+
+            const orphanedChunks = [];
+            localChunkMap.forEach(chunk => {
+                if (!visited.has(chunk.id)) orphanedChunks.push(chunk);
+            });
+            orphanedChunks.sort((a, b) => { if (a.y !== b.y) return a.y - b.y; return a.x - b.x; });
+            orderedChunks.push(...orphanedChunks);
+            return orderedChunks;
+        }
+
+        function getCombinedText() {
+            const exportOrderChunks = getOrderedChunksForExport();
+            return exportOrderChunks.map(chunk => {
+                let linkInfo = "";
+                if (chunk.nextChunkId) {
+                    const targetChunkData = chunksMap.get(chunk.nextChunkId);
+                    if (targetChunkData) {
+                        linkInfo = `\n  -> Links to: ${targetChunkData.chunkTypeTag} (${targetChunkData.shapeName})`;
+                    }
+                }
+                const header = `${chunk.chunkTypeTag} | ${chunk.shapeSymbol} ${chunk.shapeName} | ${chunk.colorSymbol} ${chunk.colorName}`;
+                const tempDiv = document.createElement('div'); tempDiv.innerHTML = chunk.text;
+                const plainText = tempDiv.textContent || tempDiv.innerText || "";
+                return `${header}\n${plainText}${linkInfo}\n\n---\n`;
+            }).join('');
+        }
+
+        function renderBoard(loadedChunksData) {
+            const existingChunkElements = noteCanvas.querySelectorAll('.chorus-chunk');
+            existingChunkElements.forEach(el => el.remove());
+
+            chunks = loadedChunksData || [];
+            chunksMap.clear();
+
+            highestZIndex = 0;
+            selectedChunkId = null;
+            lastDeletedChunk = null;
+            undoDeleteBtn.disabled = true;
+            cancelLinkingMode(true);
+
+            if (Array.isArray(chunks)) {
+                chunks.forEach(chunkData => {
+                    chunkData.nextChunkId = chunkData.nextChunkId || null;
+                    if (chunkData && chunkData.id && chunkData.chunkTypeTag && chunkData.shapeName && chunkData.colorName) {
+                        chunksMap.set(chunkData.id, chunkData);
+                        createChunkElement(chunkData);
+                        if (chunkData.zIndex > highestZIndex) {
+                            highestZIndex = chunkData.zIndex;
+                        }
+                    } else {
+                        console.warn("Skipping invalid chunk data during render:", chunkData);
+                    }
+                });
+            }
+            if(chunks.length === 0) highestZIndex = 1;
+
+            updateSelectedVisuals();
+            drawConnections();
+            updateChunkCounter();
+        }
+
+        function setupExportDropdown() {
+            exportBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                exportDropdown.classList.toggle('hidden');
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!exportBtn.contains(e.target) && !exportDropdown.contains(e.target)) {
+                    exportDropdown.classList.add('hidden');
+                }
+            });
+        }
+
+        exportTxtBtn.addEventListener('click', () => {
+            if (chunks.length === 0) { showMessage("Empty Board", "Nothing to export."); return; }
+            const text = getCombinedText();
+            downloadFile(text, 'chorus-notes.txt', 'text/plain');
+            exportDropdown.classList.add('hidden');
+        });
+        exportHtmlBtn.addEventListener('click', () => {
+            if (chunks.length === 0) { showMessage("Empty Board", "Nothing to export."); return; }
+            const exportOrderChunks = getOrderedChunksForExport();
+            let htmlContent = `<html><head><title>CHORUS Notes</title><style>body{font-family:sans-serif; line-height:1.6;} .chunk{border:1px solid #eee; margin-bottom:20px; padding:15px; border-radius:5px; box-shadow: 2px 2px 5px #ccc;} h3{margin-top:0; font-size:1.1em; color:#333; border-bottom:1px solid #eee; padding-bottom:5px;} .chunk-meta{font-size:0.9em; color:#777; margin-bottom:10px;} .link-info{font-style:italic; color:#555; font-size:0.85em;}</style></head><body><h1>CHORUS Notes</h1>`;
+            exportOrderChunks.forEach(chunk => {
+                const headerMeta = `${chunk.chunkTypeTag} | ${chunk.shapeSymbol} ${chunk.shapeName} | ${chunk.colorSymbol} ${chunk.colorName}`;
+                let linkInfoHtml = "";
+                if (chunk.nextChunkId) {
+                    const targetChunkData = chunksMap.get(chunk.nextChunkId);
+                    if (targetChunkData) {
+                        linkInfoHtml = `<div class="link-info">Links to: ${targetChunkData.chunkTypeTag} (${targetChunkData.shapeName})</div>`;
+                    }
+                }
+                htmlContent += `<div class="chunk"><h3>${chunk.chunkTypeTag}</h3><div class="chunk-meta">${headerMeta.replace(/ \| /g, ' &bull; ')}</div><div>${chunk.text}</div>${linkInfoHtml}</div>`;
+            });
+            htmlContent += '</body></html>';
+            downloadFile(htmlContent, 'chorus-notes.html', 'text/html');
+            exportDropdown.classList.add('hidden');
+        });
+        exportMdBtn.addEventListener('click', () => {
+            if (chunks.length === 0) { showMessage("Empty Board", "Nothing to export."); return; }
+            const exportOrderChunks = getOrderedChunksForExport();
+            let mdContent = '# CHORUS Notes\n\n';
+            exportOrderChunks.forEach(chunk => {
+                const headerMeta = `${chunk.chunkTypeTag} | ${chunk.shapeSymbol} ${chunk.shapeName} | ${chunk.colorSymbol} ${chunk.colorName}`;
+                let textContent = chunk.text;
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = textContent;
+                tempDiv.querySelectorAll('p').forEach(p => { p.insertAdjacentText('afterend', '\n\n'); p.replaceWith(...p.childNodes); });
+                tempDiv.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+                tempDiv.querySelectorAll('strong, b').forEach(s => s.replaceWith(`**${s.textContent}**`));
+                tempDiv.querySelectorAll('em, i').forEach(e => e.replaceWith(`*${e.textContent}*`));
+                tempDiv.querySelectorAll('a').forEach(a => a.replaceWith(`[${a.textContent}](${a.href})`));
+                textContent = (tempDiv.textContent || tempDiv.innerText || "").trim();
+                mdContent += `## ${chunk.chunkTypeTag}\n`;
+                mdContent += `*Metadata: ${headerMeta.replace(/ \| /g, ' &bull; ')}*\n\n`;
+                mdContent += `${textContent}\n`;
+                if (chunk.nextChunkId) {
+                    const targetChunkData = chunksMap.get(chunk.nextChunkId);
+                    if (targetChunkData) {
+                        mdContent += `\n  *&rarr; Links to: ${targetChunkData.chunkTypeTag} (${targetChunkData.shapeName})*\n`;
+                    }
+                }
+                mdContent += `\n---\n\n`;
+            });
+            downloadFile(mdContent, 'chorus-notes.md', 'text/markdown');
+            exportDropdown.classList.add('hidden');
+        });
+        function downloadFile(content, fileName, contentType) {
+            const a = document.createElement('a');
+            const file = new Blob([content], {type: contentType});
+            a.href = URL.createObjectURL(file);
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+        }
+
+        // --- Keyboard Shortcuts ---
+        document.addEventListener('keydown', (e) => {
+            const activeEl = document.activeElement;
+            const isInputFocused = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable);
+            const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+            let shortcutHandled = false;
+
+            if (isCtrlOrCmd) {
+                 switch (e.key.toLowerCase()) {
+                    case 's': saveBtn.click(); shortcutHandled = true; break;
+                    case 'o': loadBtn.click(); shortcutHandled = true; break;
+                    case 'z': if (!undoDeleteBtn.disabled) { undoDeleteBtn.click(); shortcutHandled = true; } break;
+                 }
+            }
+            
+            if(shortcutHandled){
+                e.preventDefault();
+                return;
+            }
+
+            if (isInputFocused) {
+                 if (e.key === 'Escape') {
+                    activeEl.blur(); // Allow Esc to unfocus from text areas
+                 }
+                 return; // Don't process other shortcuts while typing
+            }
+            
+            switch(e.key){
+                case 'Escape':
+                    if (!addChunkModal.classList.contains('hidden')) { hideModal(addChunkModal); }
+                    else if (!editChunkModal.classList.contains('hidden')) { hideModal(editChunkModal); }
+                    else if (!helpModal.classList.contains('hidden')) { hideModal(helpModal); }
+                    else if (!messageModal.classList.contains('hidden')) { hideModal(messageModal); }
+                    else if (!aiActionModal.classList.contains('hidden')) { hideModal(aiActionModal); }
+                    else if (!settingsModal.classList.contains('hidden')) { hideModal(settingsModal); }
+                    else if (linkingMode) { cancelLinkingMode(false); }
+                    else if (selectedChunkId) { deselectAllChunks(); }
+                    shortcutHandled = true;
+                    break;
+                case 'Delete':
+                case 'Backspace':
+                    if (selectedChunkId) {
+                        showMessage("Confirm Delete", `Are you sure you want to delete the selected chunk (${chunksMap.get(selectedChunkId)?.chunkTypeTag || 'chunk'})?`, [
+                            { text: 'Cancel', class: 'btn-secondary' },
+                            { text: 'Delete', class: 'btn-danger', action: () => { deleteChunk(selectedChunkId); }}
+                        ]);
+                        shortcutHandled = true;
+                    }
+                    break;
+                case 'a':
+                case 'A':
+                    addChunkBtn.click();
+                    shortcutHandled = true;
+                    break;
+                case '+':
+                case '=':
+                    zoomInBtn.click();
+                    shortcutHandled = true;
+                    break;
+                case '-':
+                    zoomOutBtn.click();
+                    shortcutHandled = true;
+                    break;
+                case '0':
+                    zoomResetBtn.click();
+                    shortcutHandled = true;
+                    break;
+                case '?':
+                case '/':
+                    helpBtn.click();
+                    shortcutHandled = true;
+                    break;
+            }
+
+            if(shortcutHandled){
+                 e.preventDefault();
+            }
+        });
+
+        // --- Initialization Sequence ---
+        function initializeApp() {
+            document.getElementById('copyrightYear').textContent = new Date().getFullYear();
+            loadApiKey();
+            populateAddChunkModal();
+            populateHelpModal();
+            setupExportDropdown();
+            renderBoard([]);
+
+            let resizeQueued = false;
+            window.addEventListener('resize', () => {
+                if (resizeQueued) return;
+                resizeQueued = true;
+                requestAnimationFrame(() => {
+                    const toolbarElement = document.querySelector('.toolbar');
+                    const footerElement = document.querySelector('footer');
+                    let toolbarHeight = toolbarElement ? toolbarElement.offsetHeight : 0;
+                    let footerHeight = footerElement ? footerElement.offsetHeight : 0;
+                    let paddingTop = 0;
+                    if (noteCanvasContainer) {
+                        noteCanvasContainer.style.height = `calc(100vh - ${toolbarHeight}px - ${footerHeight}px - ${paddingTop}px)`;
+                    }
+                    applyTransform();
+                    resizeQueued = false;
+                });
+            });
+
+            window.dispatchEvent(new Event('resize'));
+            resetAndCenterView();
+
+            window.addEventListener('beforeunload', (event) => {
+                if (chunks.length > 0) {
+                    event.preventDefault();
+                    event.returnValue = '';
+                    return '';
+                }
+            });
+
+            // Set focus to the main canvas container to enable keyboard shortcuts immediately on load.
+            // A short delay can sometimes help ensure the element is ready to receive focus.
+            setTimeout(() => {
+                document.getElementById('noteCanvasContainer').focus();
+            }, 100);
+
+            console.log("CHORUS App Initialized");
+        }
+
+        initializeApp();
+    });
+    </script>
+</body>
+</html>
