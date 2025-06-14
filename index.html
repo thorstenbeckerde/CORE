@@ -230,26 +230,28 @@
 <body class="bg-gray-100 text-gray-800">
     <div id="appContainer">
         <!-- Toolbar -->
-        <div class="toolbar p-3 bg-white shadow-md flex flex-col sm:flex-row sm:flex-wrap items-center justify-between gap-2 print:hidden">
-            <!-- Left Aligned Buttons -->
-            <div class="flex items-center space-x-2 w-full sm:w-auto justify-center sm:justify-start mb-2 sm:mb-0">
+        <div class="toolbar p-3 bg-white shadow-md flex flex-wrap items-center justify-center sm:justify-between gap-x-4 gap-y-2 print:hidden">
+            <!-- Left Group -->
+            <div class="flex items-center flex-wrap justify-center gap-2">
                 <button id="addChunkBtn" class="btn btn-primary" title="Add Chunk (A)">Add</button>
                 <button id="shuffleChunksBtn" class="btn btn-secondary" title="Shuffle Chunks">Shuffle</button>
                 <button id="clearCanvasBtn" class="btn btn-danger" title="Clear Canvas">Clear</button>
                 <button id="undoDeleteBtn" class="btn btn-secondary" title="Undo Last Delete (Ctrl/Cmd+Z)" disabled>Undo</button>
             </div>
-            <!-- Center Buttons -->
-            <div class="flex items-center space-x-2 w-full sm:w-auto justify-center mb-2 sm:mb-0">
-                 <button id="summarizeBtn" class="btn btn-secondary" title="Summarize the board with AI">
+
+            <!-- Center Group -->
+            <div class="flex items-center flex-wrap justify-center gap-2">
+                <button id="summarizeBtn" class="btn btn-secondary" title="Summarize the board with AI">
                     <svg xmlns="http://www.w3.org/2000/svg" class="icon -ml-1" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.25 10.5l-1.5-1.5 1.5-1.5 1.5 1.5-1.5 1.5ZM16.5 3.75l-1.5-1.5 1.5-1.5 1.5 1.5-1.5 1.5Z" /></svg>
                     Summarize
-                 </button>
+                </button>
                 <button id="zoomInBtn" class="btn btn-secondary" title="Zoom In (+/=)">+</button>
                 <button id="zoomOutBtn" class="btn btn-secondary" title="Zoom Out (-)">-</button>
                 <button id="zoomResetBtn" class="btn btn-secondary" title="Reset Zoom (0)">100%</button>
             </div>
-            <!-- Right Aligned Buttons -->
-            <div class="flex items-center space-x-2 w-full sm:w-auto justify-center sm:justify-end mb-2 sm:mb-0">
+
+            <!-- Right Group -->
+            <div class="flex items-center flex-wrap justify-center gap-2">
                 <button id="saveBtn" class="btn btn-secondary" title="Save to File (Ctrl/Cmd+S)">Save</button>
                 <button id="loadBtn" class="btn btn-secondary" title="Load from File (Ctrl/Cmd+O)">Load</button>
 
@@ -264,10 +266,6 @@
                         </div>
                     </div>
                 </div>
-
-            </div>
-             <!-- Far Right Buttons & Info -->
-            <div class="flex flex-col items-center sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-1 w-full sm:w-auto justify-center sm:justify-end">
                 <span id="chunkCountDisplay" class="text-sm text-gray-500 mx-2">Chunks: 0</span>
                 <a href="https://ko-fi.com/thorstenbecker" target="_blank" style="text-decoration: none;">
                      <button class="btn btn-donate" title="Donate on Ko-fi">
@@ -288,6 +286,7 @@
                 <button id="helpBtn" class="btn btn-secondary" title="Help (?)">Help</button>
             </div>
         </div>
+
 
         <!-- Main Canvas Area -->
         <div id="noteCanvasContainer" tabindex="-1">
@@ -929,20 +928,26 @@ ${sourceChunkData.text}`;
             aiBtn.className = 'chunk-action-btn ai-chunk-btn';
             aiBtn.title = 'AI Assistant';
             aiBtn.innerHTML = ICON_AI_SPARKLE;
-            aiBtn.addEventListener('click', (e) => {
+            const handleAiButtonAction = (e) => {
                 e.preventDefault(); e.stopPropagation();
                 openAiModal(chunkData.id);
-            });
+            };
+            aiBtn.addEventListener('click', handleAiButtonAction);
+            aiBtn.addEventListener('touchend', handleAiButtonAction);
+
 
             // Edit Button
             const editBtn = document.createElement('button');
             editBtn.className = 'chunk-action-btn edit-chunk-btn';
             editBtn.title = 'Edit Chunk Properties';
             editBtn.innerHTML = ICON_PENCIL_EDIT;
-            editBtn.addEventListener('click', (e) => {
+            const handleEditButtonAction = (e) => {
                 e.preventDefault(); e.stopPropagation();
                 openEditChunkModal(chunkData.id);
-            });
+            };
+            editBtn.addEventListener('click', handleEditButtonAction);
+            editBtn.addEventListener('touchend', handleEditButtonAction);
+
 
             // Link Button
             const linkBtn = document.createElement('button');
