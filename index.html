@@ -299,8 +299,7 @@
 
     <!-- Footer -->
     <footer class="text-center p-2 text-xs text-gray-500 print:hidden">
-        &copy; <span id="copyrightYear"></span> Thorsten Becker.
-        <a href="https://www.linkedin.com/in/thorsten-becker-de/" target="_blank" class="text-blue-600 hover:underline">Connect on LinkedIn</a>.
+        &copy; <span id="copyrightYear"></span> Thorsten Becker, <a href="https://www.thorstenbecker.de" target="_blank" class="text-blue-600 hover:underline">thorstenbecker.de</a>.
     </footer>
 
     <!-- Add Chunk Modal -->
@@ -440,6 +439,9 @@
                          Donate on Ko-fi
                     </a>
                     <p class="mt-3">Any other use requires a license. Please reach out to me at <a href="mailto:hello@thorstenbecker.de" class="text-blue-600 hover:underline">hello@thorstenbecker.de</a> to inquire.</p>
+                </div>
+                 <div class="text-center text-xs text-gray-500 pt-4 pb-2">
+                    Copyright &copy; <span id="copyrightYearHelp"></span> Thorsten Becker, <a href="https://www.thorstenbecker.de" target="_blank" class="text-blue-600 hover:underline">thorstenbecker.de</a>. All Rights Reserved.
                 </div>
             </div>
             <div class="mt-6 flex justify-end"><button id="closeHelpBtn" class="btn btn-primary">OK</button></div>
@@ -2058,7 +2060,10 @@ ${sourceChunkData.text}`;
 
         // --- Initialization Sequence ---
         function initializeApp() {
-            document.getElementById('copyrightYear').textContent = new Date().getFullYear();
+            const currentYear = new Date().getFullYear();
+            document.getElementById('copyrightYear').textContent = currentYear;
+            document.getElementById('copyrightYearHelp').textContent = currentYear;
+
             loadApiKey();
             populateAddChunkModal();
             populateHelpModal();
