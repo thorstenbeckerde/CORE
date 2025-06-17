@@ -321,9 +321,6 @@
             cursor: move;
             border-bottom: 1px solid var(--color-border);
             user-select: none;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -332,6 +329,13 @@
             border-top-right-radius: 5px;
             color: var(--color-text-light);
             transition: background-color 0.3s, border-color 0.3s;
+            overflow: hidden; /* Add overflow hidden to the parent flex container */
+        }
+        .chunk-header-title {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0; /* Allow title to shrink */
         }
         .chunk-header-title .tag { font-family: var(--font-display); font-style: italic; font-weight: 600; color: var(--color-text-main); }
         .chunk-header-title .shape-symbol, .chunk-header-title .color-symbol { font-weight: normal; }
@@ -463,6 +467,10 @@
             margin-left: 4px;
             line-height: 1;
         }
+        .chunk-actions {
+            flex-shrink: 0; /* Prevent the actions container from shrinking */
+            padding-left: 8px; /* Ensure space between title and buttons */
+        }
         .chunk-action-btn svg { stroke: var(--color-text-light); width: 14px; height: 14px; }
         .chunk-action-btn:hover svg { stroke: var(--color-text-main); }
         .delete-chunk-btn:hover svg { stroke: var(--color-danger) !important; }
@@ -471,9 +479,7 @@
 </head>
 <body>
     <div id="appContainer">
-        <!-- Toolbar -->
         <div class="toolbar p-3 shadow-md flex flex-wrap items-center justify-center sm:justify-between gap-x-4 gap-y-2 print:hidden">
-            <!-- Left Group -->
             <div class="flex items-center flex-wrap justify-center gap-2">
                 <button id="addChunkBtn" class="btn btn-primary" title="Add Chunk (A)">Add</button>
                 <button id="shuffleChunksBtn" class="btn btn-secondary" title="Shuffle Chunks">Shuffle</button>
@@ -481,7 +487,6 @@
                 <button id="undoDeleteBtn" class="btn btn-secondary" title="Undo Last Delete (Ctrl/Cmd+Z)" disabled>Undo</button>
             </div>
 
-            <!-- Center Group -->
             <div class="flex items-center flex-wrap justify-center gap-2">
                 <button id="zoomOutBtn" class="btn btn-secondary" title="Zoom Out (-)">-</button>
                 <button id="zoomResetBtn" class="btn btn-secondary" title="Reset Zoom (0)">100%</button>
@@ -489,7 +494,6 @@
                 <button id="zoomInBtn" class="btn btn-secondary" title="Zoom In (+/=)">+</button>
             </div>
 
-            <!-- Right Group -->
             <div class="flex items-center flex-wrap justify-center gap-2">
                  <button id="summarizeBtn" class="btn btn-secondary" title="Summarize the board with AI">
                     Summarize
@@ -509,30 +513,25 @@
             </div>
         </div>
 
-        <!-- Main Canvas Area -->
         <div id="noteCanvasContainer" tabindex="-1">
             <div id="transformContainer">
                 <div id="noteCanvas">
                     <svg id="svgCanvas"></svg>
                     <div id="centerMarker" class="hidden"></div>
-                    <!-- Chunks will be appended here -->
-                </div>
+                    </div>
             </div>
         </div>
     </div>
 
-    <!-- Footer -->
     <footer class="text-center p-2 text-xs text-gray-500 print:hidden">
         &copy; <span id="copyrightYear"></span> Thorsten Becker, <a href="https://www.thorstenbecker.de" target="_blank" class="text-blue-600 hover:underline">thorstenbecker.de</a>.
     </footer>
 
-    <!-- Modals -->
     <div id="addChunkModal" class="modal hidden"><div class="modal-content"> <h2 class="text-xl mb-4">Add New Chunk</h2> <label for="chunkTypeSelect" class="block mb-1 font-medium">Chunk Type:</label> <select id="chunkTypeSelect" class="form-select"></select> <label for="chunkShapeSelect" class="block mb-1 mt-3 font-medium">Shape:</label> <select id="chunkShapeSelect" class="form-select"></select> <label for="chunkColorSelect" class="block mb-1 mt-3 font-medium">Color Tag:</label> <select id="chunkColorSelect" class="form-select"></select> <div class="mt-6 flex justify-end"> <button id="cancelAddChunkBtn" class="btn btn-secondary">Cancel</button> <button id="confirmAddChunkBtn" class="btn btn-primary">Add Chunk</button> </div> </div></div>
     <div id="editChunkModal" class="modal hidden"><div class="modal-content"> <h2 class="text-xl mb-4">Edit Chunk</h2> <input type="hidden" id="editingChunkId"> <label for="editChunkTypeSelect" class="block mb-1 font-medium">Chunk Type:</label> <select id="editChunkTypeSelect" class="form-select"></select> <label for="editChunkShapeSelect" class="block mb-1 mt-3 font-medium">Shape:</label> <select id="editChunkShapeSelect" class="form-select"></select> <label for="editChunkColorSelect" class="block mb-1 mt-3 font-medium">Color Tag:</label> <select id="editChunkColorSelect" class="form-select"></select> <div class="mt-6 flex justify-end"> <button id="cancelEditChunkBtn" class="btn btn-secondary">Cancel</button> <button id="confirmEditChunkBtn" class="btn btn-primary">Save Changes</button> </div> </div></div>
     <div id="aiActionModal" class="modal hidden"><div class="modal-content"> <span id="closeAiActionModalBtn" class="close-button">&times;</span> <h2 class="flex items-center text-xl mb-4">AI Assistant</h2> <p class="text-sm text-gray-600 mb-4">Powered by Gemini. Current chunk content will be used as context.</p> <label for="aiPromptTextarea" class="block mb-1 mt-3 font-medium">Your Prompt:</label> <textarea id="aiPromptTextarea" class="form-textarea" placeholder="e.g., 'Rewrite this to be more concise.'"></textarea> <div class="mt-4 flex flex-wrap justify-between items-center gap-2"> <button id="aiActionSuggestNextBtn" class="btn btn-secondary">Suggest Next</button> <div class="flex-grow"></div> <button id="cancelAiActionBtn" class="btn btn-secondary">Cancel</button> <button id="aiActionGenerateBtn" class="btn btn-primary">Generate & Replace</button> </div> </div></div>
     <div id="messageModal" class="modal hidden"><div class="modal-content max-w-lg"> <h2 id="messageTitle" class="text-xl font-semibold mb-3">Message</h2> <div id="messageText" class="mb-4 text-sm"></div> <div id="messageButtons" class="flex justify-end"></div> </div></div>
     
-    <!-- Settings Modal -->
     <div id="settingsModal" class="modal hidden">
         <div class="modal-content">
             <span id="closeSettingsModalBtn" class="close-button">&times;</span>
@@ -577,14 +576,12 @@
         </div>
     </div>
 
-    <!-- Help Modal -->
     <div id="helpModal" class="modal hidden">
         <div class="modal-content">
             <span id="closeHelpModalSpan" class="close-button">&times;</span>
             <h2 class="text-2xl mb-4">CHORUS Quick Help</h2>
             <div id="help-scroll-content">
-                <!-- Help content will be populated by JS -->
-            </div>
+                </div>
             <div class="mt-6 flex justify-end"><button id="closeHelpBtn" class="btn btn-primary">OK</button></div>
         </div>
     </div>
@@ -1360,7 +1357,7 @@
                 const worldX = (centerX - state.translateX) / state.scale;
                 const worldY = (centerY - state.translateY) / state.scale;
 
-                const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, state.scale * factor));
+                const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, state.scale * scaleFactor));
                 state.translateX = centerX - worldX * newScale;
                 state.translateY = centerY - worldY * newScale;
                 state.scale = newScale;
@@ -1591,7 +1588,7 @@
                     }
                     mdContent += `\n---\n\n`;
                 });
-                downloadFile(mdContent, 'chorus-notes.md', 'text/markdown');
+                downloadFile(mdContent, 'text/markdown');
                 DOMElements.exportDropdown.classList.add('hidden');
             });
 
