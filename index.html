@@ -472,7 +472,6 @@
             <!-- Left Group -->
             <div class="flex items-center flex-wrap justify-center gap-2">
                 <button id="addChunkBtn" class="btn btn-primary" title="Add Chunk (A)">Add</button>
-                <button id="centerLastBtn" class="btn btn-secondary" title="Center on Last Added Chunk (C)" disabled>Center</button>
                 <button id="shuffleChunksBtn" class="btn btn-secondary" title="Shuffle Chunks">Shuffle</button>
                 <button id="clearCanvasBtn" class="btn btn-danger" title="Clear Canvas">Clear</button>
                 <button id="undoDeleteBtn" class="btn btn-secondary" title="Undo Last Delete (Ctrl/Cmd+Z)" disabled>Undo</button>
@@ -482,6 +481,7 @@
             <div class="flex items-center flex-wrap justify-center gap-2">
                 <button id="zoomOutBtn" class="btn btn-secondary" title="Zoom Out (-)">-</button>
                 <button id="zoomResetBtn" class="btn btn-secondary" title="Reset Zoom (0)">100%</button>
+                <button id="centerLastBtn" class="btn btn-secondary" title="Center on Last Added Chunk (C)" disabled>Center</button>
                 <button id="zoomInBtn" class="btn btn-secondary" title="Zoom In (+/=)">+</button>
             </div>
 
@@ -1284,11 +1284,22 @@
 
         // --- Interaction Logic (Pan, Zoom, Drag, Resize) ---
         const getPointerCoordinates = e => e.touches ? ({ x: e.touches[0].clientX, y: e.touches[0].clientY, count: e.touches.length }) : ({ x: e.clientX, y: e.clientY, count: e.buttons === 1 ? 1 : 0 });
+        
+        function getPinchDistance(e) {
+            const t1 = e.touches[0];
+            const t2 = e.touches[1];
+            return Math.sqrt(Math.pow(t1.clientX - t2.clientX, 2) + Math.pow(t1.clientY - t2.clientY, 2));
+        }
 
         function onInteractionStart(e) {
-            if (e.touches && e.touches.length > 1) return;
+            if (e.touches && e.touches.length > 1) {
+                e.preventDefault();
+                state.currentAction = 'pinch';
+                state.initialPinchDistance = getPinchDistance(e);
+                return;
+            }
+
             const pointer = getPointerCoordinates(e);
-            
             let targetElement = e.target;
             let actionTarget = null;
 
@@ -1330,6 +1341,30 @@
         function onInteractionMove(e) {
             if (!state.currentAction) return;
             e.preventDefault();
+            
+            if (state.currentAction === 'pinch' && e.touches.length === 2) {
+                const newPinchDistance = getPinchDistance(e);
+                const scaleFactor = newPinchDistance / state.initialPinchDistance;
+                state.initialPinchDistance = newPinchDistance;
+
+                const rect = DOMElements.noteCanvasContainer.getBoundingClientRect();
+                const t1 = e.touches[0];
+                const t2 = e.touches[1];
+                const centerX = (t1.clientX + t2.clientX) / 2 - rect.left;
+                const centerY = (t1.clientY + t2.clientY) / 2 - rect.top;
+
+                const worldX = (centerX - state.translateX) / state.scale;
+                const worldY = (centerY - state.translateY) / state.scale;
+
+                const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, state.scale * scaleFactor));
+                state.translateX = centerX - worldX * newScale;
+                state.translateY = centerY - worldY * newScale;
+                state.scale = newScale;
+
+                applyTransform();
+                return;
+            }
+
             const pointer = getPointerCoordinates(e);
 
             requestAnimationFrame(() => {
@@ -1367,7 +1402,10 @@
         }
         
         function onInteractionEnd(e) {
-            if (state.currentAction === 'drag' || state.currentAction === 'resize') {
+            if (state.currentAction === 'pinch' && e.touches.length < 2) {
+                state.currentAction = null;
+                state.initialPinchDistance = null;
+            } else if (state.currentAction === 'drag' || state.currentAction === 'resize') {
                 const chunkEl = document.getElementById(state.selectedChunkId);
                 const chunkData = state.chunksMap.get(state.selectedChunkId);
                 if (chunkEl && chunkData) {
@@ -1376,15 +1414,17 @@
                     chunkData.width = chunkEl.offsetWidth;
                     chunkData.height = chunkEl.offsetHeight;
                 }
-            }
-            if (state.currentAction === 'pan') {
+            } else if (state.currentAction === 'pan') {
                 DOMElements.noteCanvasContainer.classList.remove('panning');
             }
-            state.currentAction = null;
-            document.removeEventListener('mousemove', onInteractionMove);
-            document.removeEventListener('mouseup', onInteractionEnd);
-            document.removeEventListener('touchmove', onInteractionMove);
-            document.removeEventListener('touchend', onInteractionEnd);
+            
+            if (!e.touches || e.touches.length === 0) {
+                 state.currentAction = null;
+                 document.removeEventListener('mousemove', onInteractionMove);
+                 document.removeEventListener('mouseup', onInteractionEnd);
+                 document.removeEventListener('touchmove', onInteractionMove);
+                 document.removeEventListener('touchend', onInteractionEnd);
+            }
         }
 
         // --- Event Listeners Setup ---
@@ -1415,6 +1455,8 @@
             DOMElements.centerLastBtn.addEventListener('click', () => {
                 if (state.lastAddedChunkId) centerOnChunk(state.lastAddedChunkId);
             });
+            DOMElements.shuffleChunksBtn.addEventListener('click', shuffleChunks);
+            DOMElements.summarizeBtn.addEventListener('click', summarizeBoard);
             DOMElements.clearCanvasBtn.addEventListener('click', () => {
                 if (state.chunks.length === 0) {
                     showMessage("Canvas Empty", "The canvas is already clear.");
@@ -1684,6 +1726,81 @@
                     <code>Del</code>/<code>Backspace</code>: Delete Selected | <code>+/-</code>: Zoom | <code>0</code>: Reset Zoom
                 </p>
             `;
+        }
+
+        function shuffleChunks() {
+            if (state.chunks.length < 2) {
+                showMessage("Not Enough Chunks", "You need at least two chunks on the canvas to shuffle.");
+                return;
+            }
+            const PADDING = 50;
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+            state.chunks.forEach(chunk => {
+                minX = Math.min(minX, chunk.x);
+                minY = Math.min(minY, chunk.y);
+                maxX = Math.max(maxX, chunk.x + chunk.width);
+                maxY = Math.max(maxY, chunk.y + chunk.height);
+            });
+
+            const bboxWidth = maxX - minX;
+            const bboxHeight = maxY - minY;
+
+            state.chunks.forEach(chunkData => {
+                const chunkEl = document.getElementById(chunkData.id);
+                if (chunkEl) {
+                    chunkData.x = minX + Math.random() * (bboxWidth - chunkData.width);
+                    chunkData.y = minY + Math.random() * (bboxHeight - chunkData.height);
+                    chunkEl.style.left = chunkData.x + 'px';
+                    chunkEl.style.top = chunkData.y + 'px';
+                }
+            });
+            drawConnections();
+        }
+
+        async function summarizeBoard() {
+            if (!state.geminiApiKey) {
+                showMessage("API Key Required", "Please set your Google AI API key in the Settings menu to use this feature.");
+                return;
+            }
+            if (state.chunks.length === 0) {
+                showMessage("Empty Canvas", "There is nothing to summarize. Add some chunks first.");
+                return;
+            }
+            
+            showMessage("AI Summarization", "The AI is reading your notes and generating a summary. This may take a moment...", [{text: 'Working...', class:'btn-primary', noHide: true}]);
+
+            const fullText = getCombinedText();
+            const prompt = `Please provide a concise, high-level summary of the following notes from a creative writing project. The notes are organized into chunks with different types. Focus on the core themes, character arcs, and major plot points. The notes are:\n\n---\n\n${fullText}`;
+
+            try {
+                let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                const payload = { contents: chatHistory };
+                const apiKey = state.geminiApiKey;
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+                const result = await response.json();
+                
+                if (result.candidates && result.candidates.length > 0) {
+                    const summaryText = result.candidates[0].content.parts[0].text.replace(/\n/g, '<br>');
+                    showMessage("AI Summary", summaryText);
+                } else {
+                    throw new Error("No summary was returned from the API.");
+                }
+
+            } catch (error) {
+                showMessage("AI Error", `Could not generate summary: ${error.message}`);
+                console.error(error);
+            }
         }
         
         function openEditChunkModal(chunkId) {
