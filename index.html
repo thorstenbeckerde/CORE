@@ -1430,6 +1430,14 @@
 
         // --- Event Listeners Setup ---
         function setupEventListeners() {
+            // Browser close warning
+            window.addEventListener('beforeunload', (e) => {
+                if (state.chunks.length > 0) {
+                    e.preventDefault();
+                    e.returnValue = '';
+                }
+            });
+
             // Main canvas interactions
             DOMElements.noteCanvasContainer.addEventListener('mousedown', onInteractionStart);
             DOMElements.noteCanvasContainer.addEventListener('touchstart', onInteractionStart, { passive: false });
