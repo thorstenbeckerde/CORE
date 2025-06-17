@@ -419,8 +419,12 @@
             margin-bottom: 0.5rem;
             font-size: 1.1rem;
         }
-        #help-scroll-content p {
+        #help-scroll-content p, #help-scroll-content ul {
             margin-bottom: 0.75rem;
+        }
+        #help-scroll-content ul {
+            list-style-position: inside;
+            padding-left: 1rem;
         }
         #help-scroll-content code {
             background-color: var(--color-bg-toolbar);
@@ -1356,7 +1360,7 @@
                 const worldX = (centerX - state.translateX) / state.scale;
                 const worldY = (centerY - state.translateY) / state.scale;
 
-                const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, state.scale * scaleFactor));
+                const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, state.scale * factor));
                 state.translateX = centerX - worldX * newScale;
                 state.translateY = centerY - worldY * newScale;
                 state.scale = newScale;
@@ -1694,37 +1698,56 @@
         }
 
         function populateHelpModal() {
-            DOMElements.helpContent.innerHTML = `
-                <h3>Core Actions</h3>
-                <p><b>Navigate:</b> Click and drag the background to pan. Use your mouse wheel or the <code>+/-</code> buttons to zoom.</p>
-                <p><b>Add Chunk:</b> Click the "Add" button or press <code>A</code> to create a new note chunk.</p>
-                <p><b>Move & Resize:</b> Drag a chunk by its header to move it. Drag the handle in the bottom-right corner to resize it.</p>
-                <p><b>Edit Content:</b> Simply click inside a chunk to start typing. Basic text formatting is supported.</p>
-                <p><b>Edit Properties:</b> Click the pencil icon on a chunk to change its Type, Shape, and Color tags.</p>
+             DOMElements.helpContent.innerHTML = `
+                <h3>What is CHORUS?</h3>
+                <p>CHORUS is a system for those who think in constellations, not straight lines. It offers structure without rigidity and clarity without collapse. It’s a modular, visual, and non-linear method for organizing notes and a way of navigating your own cognition.</p>
+                <p>Built from chunks, not outlines, it uses shape and color for emotional and structural resonance. It honors how you think, not how you’re told to write.</p>
                 
-                <h3>Linking</h3>
-                <p>Click the link icon on a chunk to enter linking mode. Then, click another chunk to create a directional link. Click the link icon again on a linked chunk to remove its connection.</p>
-                
-                <h3>Canvas Management</h3>
-                <p><b>Center:</b> Focuses the view on the most recently added chunk.</p>
-                <p><b>Shuffle:</b> Randomly rearranges all chunks on the canvas to help find new connections.</p>
-                <p><b>Clear:</b> Deletes all chunks from the canvas. This cannot be undone.</p>
-                <p><b>Undo:</b> Restores the last chunk that was deleted.</p>
+                <h3>✨ Settings & AI Features</h3>
+                <p>Click the gear icon (<b>Settings</b>) to configure the app. This app also includes AI features powered by Google's Gemini model to supercharge your workflow.</p>
+                <ul>
+                    <li><b>Theme:</b> Choose from several color schemes (Sepia, Dark, Ballpoint, Typewriter, Poetry) to suit your preference.</li>
+                    <li><b>View Options:</b> Toggle the visibility of the background grid and the central North Star marker for a cleaner or more guided workspace.</li>
+                    <li><b>API Key:</b> You must provide your own Google AI API key to use the AI features. Your key is saved locally in your browser and never sent anywhere except to the Google API.</li>
+                    <li><b>AI Assistant:</b> Click the 'sparkle' icon ✨ in a chunk's header to open the AI Assistant. Use it to generate text, rewrite content, brainstorm ideas, and more.</li>
+                    <li><b>Summarize Board:</b> Click the 'Summarize' button in the top toolbar to get a high-level summary of all notes on your canvas.</li>
+                </ul>
 
-                <h3>Saving & Exporting</h3>
-                <p>Your work is NOT saved automatically. Use <code>Save</code> to download a JSON file of your project. Use <code>Load</code> to open a previously saved file. You can also <code>Export</code> your work to TXT, HTML, or Markdown for use in other applications.</p>
-                
-                <h3>Settings & AI</h3>
-                <p>Click the gear icon to open Settings. Here you can configure the app's appearance and functionality:</p>
-                <p><b>Theme:</b> Choose from several color schemes to suit your preference, including light, dark, and typewriter modes.</p>
-                <p><b>Show Grid / Show Center Marker:</b> Toggle the visibility of the background grid and the central North Star marker for a cleaner or more guided workspace.</p>
-                <p><b>Google AI API Key:</b> To use AI features like "Summarize" or the AI assistant in each chunk, you must provide your own Google AI API key. Your key is stored locally in your browser and is never sent to any server besides Google's.</p>
+                <h3>Saving, Loading & Exporting</h3>
+                <p>Your work is NOT saved automatically. Use <code>Save</code> to download a JSON file of your project. Use <code>Load</code> to open a previously saved file.</p>
+                <p>The <code>Export</code> button lets you save your work in different formats for use in other applications:
+                    <ul>
+                        <li><b>TXT:</b> A plain text file with all chunk content in order.</li>
+                        <li><b>HTML:</b> A simple, self-contained web page of your notes.</li>
+                        <li><b>MD:</b> A Markdown file suitable for apps like Obsidian or Logseq.</li>
+                    </ul>
+                </p>
 
                 <h3>Keyboard Shortcuts</h3>
                 <p>
-                    <code>A</code>: Add Chunk | <code>C</code>: Center on Last | <code>Esc</code>: Deselect All <br>
-                    <code>Del</code>/<code>Backspace</code>: Delete Selected | <code>+/-</code>: Zoom | <code>0</code>: Reset Zoom
+                    <code>A</code>: Add Chunk | <code>C</code>: Center on Last | <code>Esc</code>: Close modals, cancel linking, or deselect chunks. <br>
+                    <code>Del</code>/<code>Backspace</code>: Delete Selected | <code>+/-</code>/<code>=</code>: Zoom | <code>0</code>: Reset Zoom<br>
+                    <code>Ctrl/Cmd + S</code>: Save | <code>Ctrl/Cmd + O</code>: Load | <code>Ctrl/Cmd + Z</code>: Undo Delete
                 </p>
+
+                <h3>Core Chunk Types</h3>
+                <ul>${CHUNK_TYPES.core.map(c => `<li><b>${c.tag}:</b> ${c.description}</li>`).join('')}</ul>
+                <h3>Optional Chunk Types</h3>
+                <ul>${CHUNK_TYPES.optional.map(c => `<li><b>${c.tag}:</b> ${c.description}</li>`).join('')}</ul>
+                <h3>Narrative Extensions</h3>
+                <ul>${CHUNK_TYPES.narrative.map(c => `<li><b>${c.tag}:</b> ${c.description}</li>`).join('')}</ul>
+                <h3>Conceptual Add-ons</h3>
+                <ul>${CHUNK_TYPES.conceptual.map(c => `<li><b>${c.tag}:</b> ${c.description}</li>`).join('')}</ul>
+
+                <h3>Shapes</h3>
+                <ul>${SHAPES.map(s => `<li><b>${s.symbol} ${s.name}:</b> ${s.meaning}</li>`).join('')}</ul>
+                
+                <h3>Color Tags</h3>
+                <ul>${COLORS.map(c => `<li><b>${c.symbol} ${c.name}:</b> ${c.essence}</li>`).join('')}</ul>
+
+                <h3>Usage & Donation</h3>
+                <p>This application is free for personal use. If you find it valuable, please consider supporting its development with a donation. Thank you!</p>
+                <p>Any other use requires a license. Please reach out to me at <b>hello@thorstenbecker.de</b> to inquire.</p>
             `;
         }
 
