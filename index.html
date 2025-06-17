@@ -1339,35 +1339,46 @@
                     applyTransform();
                 } else if (state.currentAction === 'drag') {
                     const chunkEl = document.getElementById(state.selectedChunkId);
-                    if (!chunkEl) return;
+                    const chunkData = state.chunksMap.get(state.selectedChunkId);
+                    if (!chunkEl || !chunkData) return;
                     const worldPointer = screenToWorld(pointer.x, pointer.y);
-                    const newX = worldPointer.x - state.offsetX;
-                    const newY = worldPointer.y - state.offsetY;
-                    chunkEl.style.left = `${Math.max(0, newX)}px`;
-                    chunkEl.style.top = `${Math.max(0, newY)}px`;
+                    
+                    chunkData.x = Math.max(0, worldPointer.x - state.offsetX);
+                    chunkData.y = Math.max(0, worldPointer.y - state.offsetY);
+                    
+                    chunkEl.style.left = `${chunkData.x}px`;
+                    chunkEl.style.top = `${chunkData.y}px`;
                     drawConnections();
                 } else if (state.currentAction === 'resize') {
                     const chunkEl = document.getElementById(state.selectedChunkId);
-                    if (!chunkEl) return;
+                    const chunkData = state.chunksMap.get(state.selectedChunkId);
+                    if (!chunkEl || !chunkData) return;
                     const deltaX = (pointer.x - state.interactionStartX) / state.scale;
                     const deltaY = (pointer.y - state.interactionStartY) / state.scale;
-                    chunkEl.style.width = `${Math.max(150, state.startWidth + deltaX)}px`;
-                    chunkEl.style.height = `${Math.max(100, state.startHeight + deltaY)}px`;
+                    
+                    chunkData.width = Math.max(200, state.startWidth + deltaX);
+                    chunkData.height = Math.max(100, state.startHeight + deltaY);
+                    
+                    chunkEl.style.width = `${chunkData.width}px`;
+                    chunkEl.style.height = `${chunkData.height}px`;
                     drawConnections();
                 }
             });
         }
         
         function onInteractionEnd(e) {
-            if (state.currentAction === 'pan') {
-                DOMElements.noteCanvasContainer.classList.remove('panning');
-            } else if (state.currentAction === 'drag' || state.currentAction === 'resize') {
+            if (state.currentAction === 'drag' || state.currentAction === 'resize') {
                 const chunkEl = document.getElementById(state.selectedChunkId);
                 const chunkData = state.chunksMap.get(state.selectedChunkId);
                 if (chunkEl && chunkData) {
-                    chunkData.x = chunkEl.offsetLeft; chunkData.y = chunkEl.offsetTop;
-                    chunkData.width = chunkEl.offsetWidth; chunkData.height = chunkEl.offsetHeight;
+                    chunkData.x = chunkEl.offsetLeft;
+                    chunkData.y = chunkEl.offsetTop;
+                    chunkData.width = chunkEl.offsetWidth;
+                    chunkData.height = chunkEl.offsetHeight;
                 }
+            }
+            if (state.currentAction === 'pan') {
+                DOMElements.noteCanvasContainer.classList.remove('panning');
             }
             state.currentAction = null;
             document.removeEventListener('mousemove', onInteractionMove);
@@ -1561,6 +1572,21 @@
                 if(type && shape && color) {
                     addChunkToCanvas({ type, shape, color });
                     hideModal(DOMElements.addChunkModal);
+                }
+            });
+            DOMElements.confirmEditChunkBtn.addEventListener('click', () => {
+                const chunkId = DOMElements.editingChunkIdInput.value;
+                const chunkData = state.chunksMap.get(chunkId);
+
+                if (chunkData) {
+                    chunkData.chunkTypeTag = DOMElements.editChunkTypeSelect.value;
+                    chunkData.shapeName = DOMElements.editChunkShapeSelect.value;
+                    chunkData.colorName = DOMElements.editChunkColorSelect.value;
+
+                    updateChunkHeaderDisplay(chunkId);
+                    hideModal(DOMElements.editChunkModal);
+                } else {
+                    showMessage("Error", "Could not find the chunk to update.");
                 }
             });
             [DOMElements.cancelAddChunkBtn, DOMElements.cancelEditChunkBtn, DOMElements.closeHelpModalSpan, DOMElements.closeHelpBtn].forEach(el => el.addEventListener('click', () => hideModal(el.closest('.modal'))));
