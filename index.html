@@ -208,7 +208,7 @@
         }
         #appContainer {
             width: 100vw;
-            height: calc(var(--vh, 1vh) * 100);
+            height: 100dvh;
             display: flex;
             flex-direction: column;
         }
@@ -1851,13 +1851,6 @@
 
         // --- Initialization ---
         function initializeApp() {
-            function setViewportHeight() {
-                const vh = window.innerHeight * 0.01;
-                document.documentElement.style.setProperty('--vh', `${vh}px`);
-            }
-
-            window.addEventListener('resize', setViewportHeight);
-            window.addEventListener('orientationchange', setViewportHeight);
             document.getElementById('copyrightYear').textContent = new Date().getFullYear();
             loadSettings();
             populateAddChunkModal();
