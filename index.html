@@ -503,7 +503,7 @@
                 <button id="loadBtn" class="btn btn-secondary" title="Load from File (Ctrl/Cmd+O)">Load</button>
                 <div class="relative inline-block text-left">
                     <button id="exportBtn" class="btn btn-secondary" title="Export Options">Export</button>
-                    <div id="exportDropdown" class="origin-top-right absolute right-0 mt-2 w-40 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 hidden">
+                    <div id="exportDropdown" class="absolute right-0 mt-2 w-40 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 hidden">
                         <div class="py-1" role="menu"><button id="exportTxtBtn" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">TXT</button><button id="exportHtmlBtn" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">HTML</button><button id="exportMdBtn" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">MD</button></div>
                     </div>
                 </div>
@@ -1526,11 +1526,50 @@
                 event.target.value = null;
             });
 
-            // Export Listeners
+// Export Listeners
             DOMElements.exportBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                DOMElements.exportDropdown.classList.toggle('hidden');
+                const dropdown = DOMElements.exportDropdown;
+                const isHidden = dropdown.classList.contains('hidden');
+
+                if (isHidden) {
+                    const parentContainer = DOMElements.exportBtn.parentElement;
+                    const parentRect = parentContainer.getBoundingClientRect();
+                    // w-40 in Tailwind is 10rem, which is typically 160px.
+                    const dropdownWidth = 160; 
+
+                    // Clear any previous positioning classes
+                    dropdown.classList.remove('left-0', 'right-0', 'origin-top-left', 'origin-top-right');
+
+                    // Check if there's enough space on the right of the container
+                    const hasSpaceOnRight = (window.innerWidth - parentRect.right) >= dropdownWidth;
+                    // Check if there's enough space on the left of the container to open the menu
+                    const hasSpaceOnLeft = parentRect.right >= dropdownWidth;
+
+                    // Prefer to open the menu away from the edge of the screen.
+                    // If the button is on the right half of the screen, try opening left.
+                    if ((parentRect.left + parentRect.width / 2) > window.innerWidth / 2) {
+                        if (hasSpaceOnLeft) {
+                             // Default case: button on the right, open menu to the left.
+                             dropdown.classList.add('right-0', 'origin-top-right');
+                        } else { 
+                             // Fallback: not enough space left, so open to the right.
+                             dropdown.classList.add('left-0', 'origin-top-left');
+                        }
+                    } else {
+                        // Button is on the left half of the screen. Try opening to the right.
+                        if (hasSpaceOnRight) {
+                            dropdown.classList.add('left-0', 'origin-top-left');
+                        } else { 
+                            // Fallback: not enough space right, so open to the left.
+                            dropdown.classList.add('right-0', 'origin-top-right');
+                        }
+                    }
+                }
+                
+                dropdown.classList.toggle('hidden');
             });
+
             document.addEventListener('click', (e) => {
                 if (!DOMElements.exportBtn.contains(e.target) && !DOMElements.exportDropdown.contains(e.target)) {
                     DOMElements.exportDropdown.classList.add('hidden');
