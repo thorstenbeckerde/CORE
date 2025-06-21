@@ -737,7 +737,7 @@
         <div class="modal-content max-w-lg">
             <h2 id="messageTitle" class="text-xl font-semibold mb-3">Message</h2>
             <div id="messageText" class="mb-4 text-sm"></div>
-            <div id="messageButtons" class="flex justify-end"></div>
+            <div id="messageButtons" class="flex justify-end gap-3"></div>
         </div>
     </div>
 
@@ -792,6 +792,21 @@
             <div id="help-scroll-content">
             </div>
             <div class="mt-6 flex justify-end"><button id="closeHelpBtn" class="btn btn-primary">OK</button></div>
+        </div>
+    </div>
+    
+    <!-- Session Restore Modal -->
+    <div id="sessionRestoreModal" class="modal hidden">
+        <div class="modal-content">
+            <h2 class="text-xl mb-4">Welcome Back!</h2>
+            <p class="mb-6 text-text-main">
+                We've restored your last session from a secure, local browser save.
+                You can continue where you left off, or start with a fresh, blank canvas.
+            </p>
+            <div class="flex justify-end gap-3">
+                <button id="startFreshBtn" class="btn btn-secondary">Start Fresh</button>
+                <button id="continueSessionBtn" class="btn btn-primary">Continue</button>
+            </div>
         </div>
     </div>
 
@@ -1014,6 +1029,10 @@
                 messageTitle: document.getElementById('messageTitle'),
                 messageText: document.getElementById('messageText'),
                 messageButtons: document.getElementById('messageButtons'),
+                // Session Restore
+                sessionRestoreModal: document.getElementById('sessionRestoreModal'),
+                continueSessionBtn: document.getElementById('continueSessionBtn'),
+                startFreshBtn: document.getElementById('startFreshBtn'),
             };
 
             // --- App State ---
@@ -1063,7 +1082,7 @@
                 DOMElements.messageButtons.innerHTML = '';
                 buttonsConfig.forEach(btnConfig => {
                     const button = document.createElement('button');
-                    button.className = `btn ${btnConfig.class || 'btn-secondary'}`;
+                    button.className = `btn ${btnConfig.class || 'btn-secondary'} m-1`;
                     button.textContent = btnConfig.text;
                     button.onclick = () => {
                         if (btnConfig.action) btnConfig.action();
@@ -1072,6 +1091,81 @@
                     DOMElements.messageButtons.appendChild(button);
                 });
                 showModal(DOMElements.messageModal);
+            }
+
+            // --- Auto-Save & Session Management ---
+            const AUTO_SAVE_KEY = 'chorusAutoSave';
+            let autoSaveTimeout;
+
+            function triggerAutoSave() {
+                // This function is the single point of entry for auto-saving.
+                // It's debounced to prevent excessive writes to localStorage.
+                clearTimeout(autoSaveTimeout);
+                autoSaveTimeout = setTimeout(() => {
+                    if (state.chunks.length === 0) {
+                        // If the canvas is empty, clear the save as well.
+                        clearAutoSave();
+                    } else {
+                        // Gather the current state and save it.
+                        state.chunks.forEach(chunkData => {
+                            const chunkElement = document.getElementById(chunkData.id);
+                            if (chunkElement) {
+                                const contentDiv = chunkElement.querySelector('.chunk-content');
+                                if (contentDiv) {
+                                    chunkData.text = contentDiv.innerHTML;
+                                }
+                            }
+                        });
+                        const dataToSave = {
+                            chunks: state.chunks,
+                            viewport: {
+                                scale: state.scale,
+                                translateX: state.translateX,
+                                translateY: state.translateY
+                            },
+                            lastAddedChunkId: state.lastAddedChunkId,
+                            highestZIndex: state.highestZIndex,
+                            lastDeletedChunk: state.lastDeletedChunk // Also save the last deleted chunk for undo persistence
+                        };
+                        localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(dataToSave));
+                        // console.log("Session auto-saved."); // Optional: for debugging
+                    }
+                }, 1000); // Save 1 second after the last change.
+            }
+
+            function clearAutoSave() {
+                localStorage.removeItem(AUTO_SAVE_KEY);
+                console.log("Auto-save data cleared.");
+            }
+
+            function loadSessionFromAutoSave() {
+                const savedDataJSON = localStorage.getItem(AUTO_SAVE_KEY);
+                if (savedDataJSON) {
+                    try {
+                        const savedData = JSON.parse(savedDataJSON);
+                        if (savedData && Array.isArray(savedData.chunks) && savedData.chunks.length > 0) {
+                            // Load data into state but don't render yet
+                            state.chunks = savedData.chunks;
+                            if (savedData.viewport) {
+                                state.scale = savedData.viewport.scale || 1;
+                                state.translateX = savedData.viewport.translateX || 0;
+                                state.translateY = savedData.viewport.translateY || 0;
+                            }
+                            state.lastAddedChunkId = savedData.lastAddedChunkId || null;
+                            state.highestZIndex = savedData.highestZIndex || 1;
+                            state.lastDeletedChunk = savedData.lastDeletedChunk || null;
+
+
+                            // Now show the modal
+                            showModal(DOMElements.sessionRestoreModal);
+                            return true; // Indicate that a session was found
+                        }
+                    } catch (e) {
+                        console.error("Error parsing auto-saved session data:", e);
+                        clearAutoSave(); // Clear corrupted data
+                    }
+                }
+                return false; // No session found
             }
 
             // --- Settings & Preferences ---
@@ -1191,7 +1285,9 @@
                 state.translateY = viewportHeight / 2 - chunkCenterY * newScale;
 
                 applyTransform();
+                triggerAutoSave();
             }
+
 
             function resetAndCenterView() {
                 state.scale = 1;
@@ -1202,6 +1298,7 @@
                 state.translateX = (viewportWidth - canvasContentWidth * state.scale) / 2;
                 state.translateY = (viewportHeight - canvasContentHeight * state.scale) / 2;
                 applyTransform();
+                triggerAutoSave();
             }
 
             // --- Board Rendering ---
@@ -1212,12 +1309,11 @@
 
                 state.chunks = loadedChunksData || [];
                 state.chunksMap.clear();
-                state.highestZIndex = 0;
+                state.highestZIndex = state.highestZIndex || 0;
                 state.selectedChunkId = null;
-                state.lastDeletedChunk = null;
-                DOMElements.undoDeleteBtn.disabled = true;
-                state.lastAddedChunkId = null;
-                DOMElements.centerLastBtn.disabled = true;
+                // Don't clear lastDeletedChunk here, it might be restored
+                DOMElements.undoDeleteBtn.disabled = !state.lastDeletedChunk;
+                DOMElements.centerLastBtn.disabled = !state.lastAddedChunkId;
                 cancelLinkingMode(true);
 
                 if (Array.isArray(state.chunks)) {
@@ -1231,11 +1327,16 @@
                         }
                     });
                 }
-                if (state.chunks.length === 0) state.highestZIndex = 1;
+                if (state.chunks.length === 0) {
+                    state.highestZIndex = 1;
+                    state.lastAddedChunkId = null;
+                    DOMElements.centerLastBtn.disabled = true;
+                }
 
                 updateSelectedVisuals();
                 drawConnections();
                 updateChunkCounter();
+                triggerAutoSave();
             }
 
             // --- Chunk Management ---
@@ -1266,6 +1367,7 @@
 
                 drawConnections();
                 updateChunkCounter();
+                triggerAutoSave();
                 return newChunkData;
             }
 
@@ -1324,6 +1426,7 @@
                 content.innerHTML = chunkData.text;
                 content.addEventListener('input', () => {
                     state.chunksMap.get(chunkDiv.id).text = content.innerHTML;
+                    triggerAutoSave();
                 });
                 content.addEventListener('focus', () => {
                     chunkDiv.style.zIndex = String(++state.highestZIndex);
@@ -1396,6 +1499,7 @@
                         if (chunkElement) chunkElement.remove();
                         drawConnections();
                         updateChunkCounter();
+                        triggerAutoSave();
                     }
                 }]);
             }
@@ -1472,6 +1576,7 @@
                             chunkData.nextChunkId = null;
                             drawConnections();
                             updateSelectedVisuals();
+                            triggerAutoSave();
                         }
                     }]);
                 } else {
@@ -1502,6 +1607,7 @@
                 cancelLinkingMode(false);
                 drawConnections();
                 selectChunk(sourceId);
+                triggerAutoSave();
             }
 
             // --- Drawing Connections ---
@@ -1850,9 +1956,11 @@
             }
 
             function onInteractionEnd(e) {
+                let stateChanged = false;
                 if (state.currentAction === 'pinch' && e.touches.length < 2) {
                     state.currentAction = null;
                     state.initialPinchDistance = null;
+                    stateChanged = true;
                 } else if (state.currentAction === 'drag' || state.currentAction === 'resize') {
                     const chunkEl = document.getElementById(state.selectedChunkId);
                     const chunkData = state.chunksMap.get(state.selectedChunkId);
@@ -1861,9 +1969,15 @@
                         chunkData.y = chunkEl.offsetTop;
                         chunkData.width = chunkEl.offsetWidth;
                         chunkData.height = chunkEl.offsetHeight;
+                        stateChanged = true;
                     }
                 } else if (state.currentAction === 'pan') {
                     DOMElements.noteCanvasContainer.classList.remove('panning');
+                    stateChanged = true;
+                }
+
+                if (stateChanged) {
+                    triggerAutoSave();
                 }
 
                 if (!e.touches || e.touches.length === 0) {
@@ -1879,9 +1993,11 @@
             function setupEventListeners() {
                 // Browser close warning
                 window.addEventListener('beforeunload', (e) => {
+                    // This is now handled by auto-save, but we can keep it as a safety net
+                    // for unsaved file downloads, though not strictly necessary.
                     if (state.chunks.length > 0) {
-                        e.preventDefault();
-                        e.returnValue = '';
+                         e.preventDefault();
+                         e.returnValue = '';
                     }
                 });
 
@@ -1906,6 +2022,7 @@
                     state.scale = newScale;
 
                     applyTransform();
+                    triggerAutoSave();
                 }, {
                     passive: false
                 });
@@ -1929,10 +2046,31 @@
                         text: 'Clear Canvas',
                         class: 'btn-danger',
                         action: () => {
+                            state.lastDeletedChunk = null; // Clearing canvas invalidates undo
                             renderBoard([]);
+                            clearAutoSave(); // Explicitly clear save data
                             showMessage("Canvas Cleared", "All notes and links have been removed.");
                         }
                     }]);
+                });
+                
+                DOMElements.undoDeleteBtn.addEventListener('click', () => {
+                    if (state.lastDeletedChunk) {
+                        const chunkData = state.lastDeletedChunk;
+                        state.chunks.push(chunkData);
+                        state.chunksMap.set(chunkData.id, chunkData);
+                        createChunkElement(chunkData);
+
+                        if (chunkData.zIndex > state.highestZIndex) {
+                             state.highestZIndex = chunkData.zIndex;
+                        }
+                        drawConnections();
+                        updateChunkCounter();
+                        triggerAutoSave();
+
+                        state.lastDeletedChunk = null;
+                        DOMElements.undoDeleteBtn.disabled = true;
+                    }
                 });
 
                 const zoom = (factor) => {
@@ -1950,6 +2088,7 @@
                     state.scale = newScale;
 
                     applyTransform();
+                    triggerAutoSave();
                 };
 
                 DOMElements.zoomInBtn.addEventListener('click', () => zoom(1.25));
@@ -1967,12 +2106,13 @@
                         try {
                             const loadedData = JSON.parse(e.target.result);
                             if (loadedData && Array.isArray(loadedData.chunks)) {
-                                renderBoard(loadedData.chunks);
+                                renderBoard(loadedData.chunks); // This now triggers auto-save
                                 if (loadedData.viewport) {
                                     state.scale = loadedData.viewport.scale || 1;
                                     state.translateX = loadedData.viewport.translateX || 0;
                                     state.translateY = loadedData.viewport.translateY || 0;
                                     applyTransform();
+                                    triggerAutoSave();
                                 }
                             }
                         } catch (error) {
@@ -1987,46 +2127,8 @@
                 DOMElements.exportBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const dropdown = DOMElements.exportDropdown;
-                    const isHidden = dropdown.classList.contains('hidden');
-
-                    if (isHidden) {
-                        const parentContainer = DOMElements.exportBtn.parentElement;
-                        const parentRect = parentContainer.getBoundingClientRect();
-                        // w-40 in Tailwind is 10rem, which is typically 160px.
-                        const dropdownWidth = 160;
-
-                        // Clear any previous positioning classes
-                        dropdown.classList.remove('left-0', 'right-0', 'origin-top-left', 'origin-top-right');
-
-                        // Check if there's enough space on the right of the container
-                        const hasSpaceOnRight = (window.innerWidth - parentRect.right) >= dropdownWidth;
-                        // Check if there's enough space on the left of the container to open the menu
-                        const hasSpaceOnLeft = parentRect.right >= dropdownWidth;
-
-                        // Prefer to open the menu away from the edge of the screen.
-                        // If the button is on the right half of the screen, try opening left.
-                        if ((parentRect.left + parentRect.width / 2) > window.innerWidth / 2) {
-                            if (hasSpaceOnLeft) {
-                                // Default case: button on the right, open menu to the left.
-                                dropdown.classList.add('right-0', 'origin-top-right');
-                            } else {
-                                // Fallback: not enough space left, so open to the right.
-                                dropdown.classList.add('left-0', 'origin-top-left');
-                            }
-                        } else {
-                            // Button is on the left half of the screen. Try opening to the right.
-                            if (hasSpaceOnRight) {
-                                dropdown.classList.add('left-0', 'origin-top-left');
-                            } else {
-                                // Fallback: not enough space right, so open to the left.
-                                dropdown.classList.add('right-0', 'origin-top-right');
-                            }
-                        }
-                    }
-
                     dropdown.classList.toggle('hidden');
                 });
-
                 document.addEventListener('click', (e) => {
                     if (!DOMElements.exportBtn.contains(e.target) && !DOMElements.exportDropdown.contains(e.target)) {
                         DOMElements.exportDropdown.classList.add('hidden');
@@ -2104,7 +2206,7 @@
                         }
                         mdContent += `\n---\n\n`;
                     });
-                    downloadFile(mdContent, 'text/markdown');
+                    downloadFile(mdContent, 'chorus-notes.md', 'text/markdown');
                     DOMElements.exportDropdown.classList.add('hidden');
                 });
 
@@ -2158,16 +2260,43 @@
 
                         updateChunkHeaderDisplay(chunkId);
                         hideModal(DOMElements.editChunkModal);
+                        triggerAutoSave();
                     } else {
                         showMessage("Error", "Could not find the chunk to update.");
                     }
                 });
                 [DOMElements.cancelAddChunkBtn, DOMElements.cancelEditChunkBtn, DOMElements.closeHelpModalSpan, DOMElements.closeHelpBtn].forEach(el => el.addEventListener('click', () => hideModal(el.closest('.modal'))));
+                
+                // Session Restore Modal Listeners
+                DOMElements.continueSessionBtn.addEventListener('click', () => {
+                    hideModal(DOMElements.sessionRestoreModal);
+                    renderBoard(state.chunks);
+                    applyTransform();
+                });
+
+                DOMElements.startFreshBtn.addEventListener('click', () => {
+                    hideModal(DOMElements.sessionRestoreModal);
+                    clearAutoSave();
+                    state.chunks = []; // Reset state
+                    state.lastDeletedChunk = null;
+                    state.lastAddedChunkId = null;
+                    renderBoard([]);
+                    resetAndCenterView();
+                });
+
 
                 // Keyboard Shortcuts
                 document.addEventListener('keydown', (e) => {
                     const activeEl = document.activeElement;
                     const isInputFocused = activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable;
+
+                    // Handle undo/redo globally
+                    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+                        if(!isInputFocused){ // Prevent interfering with browser's text undo
+                           e.preventDefault();
+                           DOMElements.undoDeleteBtn.click();
+                        }
+                    }
 
                     if (!DOMElements.body.querySelector('.modal:not(.hidden)')) {
                         if (!isInputFocused) {
@@ -2253,7 +2382,10 @@
                 <p>CHORUS is a system for those who think in constellations, not straight lines. It offers structure without rigidity and clarity without collapse. It’s a modular, visual, and non-linear method for organizing notes and a way of navigating your own cognition.</p>
                 <p>Built from chunks, not outlines, it uses shape and color for emotional and structural resonance. It honors how you think, not how you’re told to write.</p>
                 
-                <h3>✨ Settings & AI Features</h3>
+                <h3>✨ NEW: Auto-Save & Session Restore</h3>
+                <p>Your work is now <b>automatically saved</b> to your browser's local storage. When you return, a prompt will ask if you want to continue your last session or start fresh. Clearing the canvas or starting fresh will also clear this saved data.</p>
+
+                <h3>Settings & AI Features</h3>
                 <p>Click the gear icon (<b>Settings</b>) to configure the app. This app also includes AI features powered by Google's Gemini model to supercharge your workflow.</p>
                 <ul>
                     <li><b>Theme:</b> Choose from several color schemes (Sepia, Dark, Ballpoint, Typewriter, Poetry) to suit your preference.</li>
@@ -2264,7 +2396,7 @@
                 </ul>
 
                 <h3>Saving, Loading & Exporting</h3>
-                <p>Your work is NOT saved automatically. Use <code>Save</code> to download a JSON file of your project. Use <code>Load</code> to open a previously saved file.</p>
+                <p>Use <code>Save</code> to download a JSON file of your project as a permanent backup. Use <code>Load</code> to open a previously saved file.</p>
                 <p>The <code>Export</code> button lets you save your work in different formats for use in other applications:
                     <ul>
                         <li><b>TXT:</b> A plain text file with all chunk content in order.</li>
@@ -2342,6 +2474,7 @@
                     }
                 });
                 drawConnections();
+                triggerAutoSave();
             }
 
             async function summarizeBoard() {
@@ -2433,8 +2566,17 @@
                 populateAddChunkModal();
                 populateHelpModal();
                 setupEventListeners();
-                renderBoard([]);
-                resetAndCenterView();
+
+                const wasSessionFound = loadSessionFromAutoSave();
+
+                if (!wasSessionFound) {
+                    // If no session, initialize as normal.
+                    renderBoard([]);
+                    resetAndCenterView();
+                }
+                // If a session was found, a modal is now visible. We wait for user input.
+                // The event listeners for the modal buttons will handle the next steps.
+
                 setTimeout(() => DOMElements.noteCanvasContainer.focus(), 100);
                 console.log("CHORUS Writer's App Initialized");
             }
