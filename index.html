@@ -668,11 +668,12 @@
             <div class="flex items-center flex-wrap justify-center gap-2">
                 <button id="addChunkBtn" class="btn btn-primary" title="Add Chunk (A)">Add</button>
                 <button id="shuffleChunksBtn" class="btn btn-secondary" title="Shuffle Chunks">Shuffle</button>
+                <button id="spiralLayoutBtn" class="btn btn-secondary" title="Arrange in Spiral">Spiral</button>
                 <button id="clearCanvasBtn" class="btn btn-danger" title="Clear Canvas">Clear</button>
-                <button id="undoDeleteBtn" class="btn btn-secondary" title="Undo Last Delete (Ctrl/Cmd+Z)" disabled>Undo</button>
             </div>
 
             <div class="flex items-center flex-wrap justify-center gap-2">
+				<button id="undoDeleteBtn" class="btn btn-secondary" title="Undo Last Delete (Ctrl/Cmd+Z)" disabled>Undo</button>
                 <button id="zoomOutBtn" class="btn btn-secondary" title="Zoom Out (-)">-</button>
                 <button id="zoomResetBtn" class="btn btn-secondary" title="Reset Zoom (0)">100%</button>
                 <button id="centerLastBtn" class="btn btn-secondary" title="Center on Last Added Chunk (C)" disabled>Center</button>
@@ -680,10 +681,10 @@
             </div>
 
             <div class="flex items-center flex-wrap justify-center gap-2">
-                <button id="summarizeBtn" class="btn btn-secondary" title="Summarize the board with AI">
+                <span id="chunkCountDisplay" class="text-sm text-gray-500 mx-2">Chunks: 0</span>
+				<button id="summarizeBtn" class="btn btn-secondary" title="Summarize the board with AI">
                     Summarize
                 </button>
-                <span id="chunkCountDisplay" class="text-sm text-gray-500 mx-2">Chunks: 0</span>
                 <button id="saveBtn" class="btn btn-secondary" title="Save to File (Ctrl/Cmd+S)">Save</button>
                 <button id="loadBtn" class="btn btn-secondary" title="Load from File (Ctrl/Cmd+O)">Load</button>
                 <div class="relative inline-block text-left">
@@ -980,6 +981,7 @@
                 addChunkBtn: document.getElementById('addChunkBtn'),
                 centerLastBtn: document.getElementById('centerLastBtn'),
                 shuffleChunksBtn: document.getElementById('shuffleChunksBtn'),
+                spiralLayoutBtn: document.getElementById('spiralLayoutBtn'),
                 clearCanvasBtn: document.getElementById('clearCanvasBtn'),
                 undoDeleteBtn: document.getElementById('undoDeleteBtn'),
                 chunkCountDisplay: document.getElementById('chunkCountDisplay'),
@@ -2104,6 +2106,7 @@ ${opmlBody}
                     if (state.lastAddedChunkId) centerOnChunk(state.lastAddedChunkId);
                 });
                 DOMElements.shuffleChunksBtn.addEventListener('click', shuffleChunks);
+                DOMElements.spiralLayoutBtn.addEventListener('click', applySpiralLayout);
                 DOMElements.summarizeBtn.addEventListener('click', summarizeBoard);
                 DOMElements.clearCanvasBtn.addEventListener('click', () => {
                     if (state.chunks.length === 0) {
@@ -2558,6 +2561,68 @@ ${opmlBody}
                 });
                 drawConnections();
                 triggerAutoSave();
+            }
+
+            function applySpiralLayout() {
+                const orderedChunks = getOrderedChunksForExport();
+                if (orderedChunks.length < 1) {
+                    showMessage("Not Enough Chunks", "You need at least one chunk to create a spiral layout.");
+                    return;
+                }
+
+                const canvasCenterX = 4000;
+                const canvasCenterY = 3000;
+
+                // --- Spiral Parameters ---
+                const PADDING = 100; 
+                const INITIAL_OFFSET = 250; 
+                const SPIRAL_SEPARATION_FACTOR = 45; 
+
+                let effective_angle = 0;
+
+                for (let i = 0; i < orderedChunks.length; i++) {
+                    const chunkData = state.chunksMap.get(orderedChunks[i].id);
+                    const chunkEl = document.getElementById(orderedChunks[i].id);
+                    const prevChunkData = (i > 0) ? state.chunksMap.get(orderedChunks[i - 1].id) : null;
+
+                    if (i > 0) {
+                        const requiredSpacing = (Math.max(prevChunkData.width, prevChunkData.height) / 2) +
+                                              (Math.max(chunkData.width, chunkData.height) / 2) +
+                                              PADDING;
+
+                        const prevChunkCenter = {
+                            x: prevChunkData.x + prevChunkData.width / 2,
+                            y: prevChunkData.y + prevChunkData.height / 2
+                        };
+                        const prevRadius = Math.sqrt(
+                            Math.pow(prevChunkCenter.x - canvasCenterX, 2) +
+                            Math.pow(prevChunkCenter.y - canvasCenterY, 2)
+                        );
+
+                        if (prevRadius > 0) {
+                            const angleIncrement = requiredSpacing / prevRadius;
+                            effective_angle += angleIncrement;
+                        } else {
+                            effective_angle += 1.5;
+                        }
+                    }
+
+                    const radius = INITIAL_OFFSET + SPIRAL_SEPARATION_FACTOR * effective_angle;
+                    
+                    const total_angle = (3 * Math.PI / 2) + effective_angle;
+
+                    const newCenterX = canvasCenterX + radius * Math.cos(total_angle);
+                    const newCenterY = canvasCenterY + radius * Math.sin(total_angle);
+
+                    chunkData.x = newCenterX - (chunkData.width / 2);
+                    chunkData.y = newCenterY - (chunkData.height / 2);
+                    chunkEl.style.left = chunkData.x + 'px';
+                    chunkEl.style.top = chunkData.y + 'px';
+                }
+
+                drawConnections();
+                triggerAutoSave();
+                showMessage("Layout Updated", "Chunks have been arranged in a spiral pattern.");
             }
 
             async function summarizeBoard() {
