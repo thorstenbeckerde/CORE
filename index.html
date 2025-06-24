@@ -689,7 +689,12 @@
                 <div class="relative inline-block text-left">
                     <button id="exportBtn" class="btn btn-secondary" title="Export Options">Export</button>
                     <div id="exportDropdown" class="absolute right-0 mt-2 w-40 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 hidden">
-                        <div class="py-1" role="menu"><button id="exportTxtBtn" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">TXT</button><button id="exportHtmlBtn" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">HTML</button><button id="exportMdBtn" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">MD</button></div>
+                        <div class="py-1" role="menu">
+                            <button id="exportTxtBtn" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">TXT</button>
+                            <button id="exportHtmlBtn" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">HTML</button>
+                            <button id="exportMdBtn" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">MD</button>
+                            <button id="exportOpmlBtn" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">OPML</button>
+                        </div>
                     </div>
                 </div>
                 <button id="settingsBtn" class="btn btn-secondary" title="Settings">Settings</button>
@@ -1028,6 +1033,7 @@
                 exportTxtBtn: document.getElementById('exportTxtBtn'),
                 exportHtmlBtn: document.getElementById('exportHtmlBtn'),
                 exportMdBtn: document.getElementById('exportMdBtn'),
+                exportOpmlBtn: document.getElementById('exportOpmlBtn'),
                 // Message
                 messageModal: document.getElementById('messageModal'),
                 messageTitle: document.getElementById('messageTitle'),
@@ -1822,6 +1828,67 @@
                     return `${header}\n${plainText}${linkInfo}\n\n---\n`;
                 }).join('');
             }
+            
+            function generateOpmlContent() {
+                const orderedChunks = getOrderedChunksForExport();
+                const title = "CHORUS Notes Export";
+                const creationDate = new Date().toUTCString();
+
+                let opmlBody = '';
+                const chunkMap = new Map(orderedChunks.map(chunk => [chunk.id, chunk]));
+                const processed = new Set();
+
+                function textToXml(text) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = text;
+                    const plainText = (tempDiv.textContent || tempDiv.innerText || "").trim();
+                    return plainText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+                }
+                
+                function buildNestedOutline(chunkId) {
+                    if (!chunkId || !chunkMap.has(chunkId) || processed.has(chunkId)) {
+                        return '';
+                    }
+                    processed.add(chunkId);
+                    const chunk = chunkMap.get(chunkId);
+                    
+                    const shape = SHAPES.find(s => s.name === chunk.shapeName) || {};
+                    const color = COLORS.find(c => c.name === chunk.colorName) || {};
+                    const outlineTitle = `${shape.symbol || ''} ${color.symbol || ''} ${chunk.chunkTypeTag}`.trim();
+
+                    let outline = `        <outline text="${textToXml(outlineTitle)}">\n`;
+                    const chunkContent = textToXml(chunk.text);
+                    if (chunkContent) {
+                       outline += `            <outline text="${chunkContent}"/>\n`;
+                    }
+
+                    if (chunk.nextChunkId) {
+                        // Recursively build the next outline inside the current one.
+                        outline += buildNestedOutline(chunk.nextChunkId);
+                    }
+                    
+                    outline += '        </outline>\n';
+                    return outline;
+                }
+
+
+                orderedChunks.forEach(chunk => {
+                    if (!processed.has(chunk.id)) {
+                        opmlBody += buildNestedOutline(chunk.id);
+                    }
+                });
+
+                return `<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+    <head>
+        <title>${title}</title>
+        <dateCreated>${creationDate}</dateCreated>
+    </head>
+    <body>
+${opmlBody}
+    </body>
+</opml>`;
+            }
 
             // --- Interaction Logic (Pan, Zoom, Drag, Resize) ---
             const getPointerCoordinates = e => e.touches ? ({
@@ -2213,6 +2280,16 @@
                     downloadFile(mdContent, 'chorus-notes.md', 'text/markdown');
                     DOMElements.exportDropdown.classList.add('hidden');
                 });
+                
+                DOMElements.exportOpmlBtn.addEventListener('click', () => {
+                    if (state.chunks.length === 0) {
+                        showMessage("Empty Board", "Nothing to export.");
+                        return;
+                    }
+                    const opmlContent = generateOpmlContent();
+                    downloadFile(opmlContent, 'chorus-notes.opml', 'application/xml');
+                    DOMElements.exportDropdown.classList.add('hidden');
+                });
 
 
                 // Settings, Help, Donate
@@ -2407,6 +2484,7 @@
                         <li><b>TXT:</b> A plain text file with all chunk content in order.</li>
                         <li><b>HTML:</b> A simple, self-contained web page of your notes.</li>
                         <li><b>MD:</b> A Markdown file suitable for apps like Obsidian or Logseq.</li>
+                        <li><b>OPML:</b> An XML-based format for outliners and mind-mapping apps.</li>
                     </ul>
                 </p>
 
