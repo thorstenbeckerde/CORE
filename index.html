@@ -1059,7 +1059,7 @@
                 linkingSourceChunkId: null,
                 geminiApiKey: null,
                 activeAiChunkId: null,
-                spiralClockwise: false, // ADDED: For toggling spiral direction
+                spiralClockwise: false, // For toggling spiral direction
                 // Transform state
                 scale: 1,
                 translateX: 0,
@@ -2582,7 +2582,8 @@ ${opmlBody}
                 const PADDING = 100;
                 const INITIAL_OFFSET = 250;
                 const SPIRAL_SEPARATION_FACTOR = 45;
-                const directionMultiplier = isClockwise ? -1 : 1;
+                // A positive multiplier creates a clockwise spiral with the current angle math.
+                const directionMultiplier = isClockwise ? 1 : -1;
 
                 let effective_angle = 0;
 
