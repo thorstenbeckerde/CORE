@@ -1059,6 +1059,7 @@
                 linkingSourceChunkId: null,
                 geminiApiKey: null,
                 activeAiChunkId: null,
+                spiralClockwise: false, // ADDED: For toggling spiral direction
                 // Transform state
                 scale: 1,
                 translateX: 0,
@@ -2570,13 +2571,18 @@ ${opmlBody}
                     return;
                 }
 
+                // Determine direction based on current state, then toggle state for the NEXT click.
+                const isClockwise = state.spiralClockwise;
+                state.spiralClockwise = !state.spiralClockwise;
+
                 const canvasCenterX = 4000;
                 const canvasCenterY = 3000;
 
                 // --- Spiral Parameters ---
-                const PADDING = 100; 
-                const INITIAL_OFFSET = 250; 
-                const SPIRAL_SEPARATION_FACTOR = 45; 
+                const PADDING = 100;
+                const INITIAL_OFFSET = 250;
+                const SPIRAL_SEPARATION_FACTOR = 45;
+                const directionMultiplier = isClockwise ? -1 : 1;
 
                 let effective_angle = 0;
 
@@ -2587,8 +2593,8 @@ ${opmlBody}
 
                     if (i > 0) {
                         const requiredSpacing = (Math.max(prevChunkData.width, prevChunkData.height) / 2) +
-                                              (Math.max(chunkData.width, chunkData.height) / 2) +
-                                              PADDING;
+                            (Math.max(chunkData.width, chunkData.height) / 2) +
+                            PADDING;
 
                         const prevChunkCenter = {
                             x: prevChunkData.x + prevChunkData.width / 2,
@@ -2608,8 +2614,8 @@ ${opmlBody}
                     }
 
                     const radius = INITIAL_OFFSET + SPIRAL_SEPARATION_FACTOR * effective_angle;
-                    
-                    const total_angle = (3 * Math.PI / 2) + effective_angle;
+
+                    const total_angle = (3 * Math.PI / 2) + (effective_angle * directionMultiplier);
 
                     const newCenterX = canvasCenterX + radius * Math.cos(total_angle);
                     const newCenterY = canvasCenterY + radius * Math.sin(total_angle);
@@ -2622,7 +2628,8 @@ ${opmlBody}
 
                 drawConnections();
                 triggerAutoSave();
-                showMessage("Layout Updated", "Chunks have been arranged in a spiral pattern.");
+                const directionText = isClockwise ? "Clockwise" : "Counter-Clockwise";
+                showMessage("Layout Updated", `Chunks arranged in a ${directionText} spiral.`);
             }
 
             async function summarizeBoard() {
