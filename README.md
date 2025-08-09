@@ -1,70 +1,84 @@
-# CHORUS
-CHORUS is a system for those who think in constellations, not straight lines. It offers structure without rigidity and clarity without collapse. It’s a modular, visual, and non-linear method for organizing notes and a way of navigating your own cognition.
+# What is CORE?
 
-Built from **chunks**, not outlines, it uses **shape** and **color** for emotional and structural resonance. It honors *how* you think, not how you’re told to write.
+You can read about the full concept of CORE here: [Full CHORUS Documentation](https://drive.google.com/file/d/1qXp0-kV4HUEdkB1A_epyTnopkdUdl3rY/view?usp=sharing).
 
-Read the full documentation here: [Full CHORUS Documentation](https://drive.google.com/file/d/1qXp0-kV4HUEdkB1A_epyTnopkdUdl3rY/view?usp=sharing).
+CORE is for those who think in constellations, not straight lines. It offers structure without rigidity, and clarity without collapse. It is more than a way to arrange notes – it is a way to navigate your own cognition and express it.
 
-### ✨ Gemini AI Features
-This app now includes AI features powered by Google's Gemini model to supercharge your workflow.
-* **AI Assistant:** Click the 'sparkle' icon ✨ in a chunk's header to open the AI Assistant. Use it to generate text, rewrite content, brainstorm ideas, and more, directly within your chunks.
-* **Suggest Next Chunk:** Inside the AI Assistant, click 'Suggest Next' to have Gemini analyze your current note and automatically create a new, linked chunk with a logical follow-up idea.
-* **Summarize Board:** Click the 'Summarize' button in the top toolbar to get a high-level summary of all notes on your canvas.
-* **API Key:** You must provide your own Google AI API key to use these features. Click the **Settings** button in the top toolbar to enter your key. Your key is saved locally and never sent anywhere except to the Google API.
+It gives form to cognitive movement, showing how meaning drifts, circles, or crystallizes over time. CORE does not ask you to tame your thoughts into tidy lists; it asks you to place them, tag them, color them, and connect what matters.
 
-### Keyboard Shortcuts
-* `Ctrl/Cmd + S`: Save the current map.
-* `Ctrl/Cmd + O`: Load a map from a file.
-* `Ctrl/Cmd + Z`: Undo the last deleted chunk.
-* `A`: Add a new chunk.
-* `+` or `=`: Zoom in.
-* `-`: Zoom out.
-* `0`: Reset zoom to 100%.
-* `?` or `/`: Open this help window.
-* `Esc`: Close modals, cancel linking, or deselect chunks.
-* `Delete` / `Backspace`: Delete selected chunk (with confirmation).
+---
 
-### Core Chunk Types (C - Chunk)
-* `#central`: The seed thought, core concept
-* `#essential`: Key supporting points or moments
-* `#expanded`: Deeper exploration, examples, nuance
-* `#supportive`: Details, quotes, sensory notes
-* `#transition`: Bridge between sections or ideas
-* `#loopback`: Refers to another chunk, prior note, or core concept
-* `#conclusive`: Ending remarks, reflection, resolution
+## The CORE Loop
 
-### Optional Chunk Types
-* `#contextual`: Background information, historical context, or literature review content
-* `#counterpoint`: Opposing viewpoints, limitations, or challenges to the central idea
-* `#application`: Practical implications, 'how-to' elements, or real-world relevance
+CORE provides a rhythm for turning thoughts into tangible output: **Chunk**, **Orient**, **Relate**, **Express**.
 
-### Narrative Extensions
-* `#temporal`: Indicates a passage of time (e.g., 'Later that evening…')
-* `#spatial`: Marks a location change (e.g., 'Across the city…')
-* `#spatiotemporal`: Combines time and location shift (e.g., 'Meanwhile, in Tokyo…')
-* `#flashback`: Indicates a past event or memory outside the main timeline
+- **Chunk**: Break ideas into self-contained blocks. Assign one tag (its function) and one color (its emotional tone).
+- **Orient**: Place chunks spatially. Let proximity suggest importance; clusters indicate themes.
+- **Relate**: Draw arrows to show flow and connection between ideas.
+- **Express**: When the map feels right, turn it into an outline, draft, or action list.
 
-### Conceptual Add-ons
-* `#dreamlike`: Marks dream sequences, hallucinations, or altered states
-* `#perspective`: Indicates a shift in point of view or narrative lens
+---
 
-### Shapes (H - Highlight)
-* **◯ Circle**: Core, self, central focus, inner truth
-* **▢ Square**: Structure, foundation, argument
-* **△ Triangle**: Change, direction, movement, shift
-* **‖ Vertical Bars**: Parallel thought, tension, opposition
-* **= Horizontal Bars**: Harmony, balance, synthesis
-* **▱ Parallelogram**: Container, segment, scene
-* **◇ Diamond**: Insight, key moment, crystallization
-* **⤣ (Hook) Arrow**: Transition, liminality, unstable ground
-* **! Exclamation Mark**: Emphasis, resonance, punctuation of thought
+## App Features
 
-### Color Tags (H - Highlight)
-* 🔴 **Red**: Tension, urgency, conflict
-* 🔵 **Blue**: Calm, stability, reflection
-* 🟢 **Green**: Growth, potential, harmony
-* 🟡 **Yellow**: Curiosity, clarity, newness
-* 🟣 **Purple**: Depth, mystery, inner insight
-* 🩶 **Grey**: Neutrality, logic, stepping back
-* ⚫ **Black**: Finality, anchor, gravitas
-* ⚪ **White**: Openness, undefined, exploratory
+- **Automatic Save**: Your work is automatically saved to your browser. When you return, you can continue your last session or start fresh.
+- **Settings (⚙️)**: Configure the app's theme, view options, and add your Google AI API key for AI features.
+- **AI Assistant (✨)**: Click the 'sparkle' icon in a chunk's header to open the AI Assistant. Use it to rewrite content, brainstorm, and more.
+- **Summarize Board**: Click 'Summarize' in the toolbar to get a high-level summary of all notes on your canvas.
+- **Save / Load / Export**: Use the toolbar buttons to save a permanent backup file, load a file, or export your work to TXT, HTML, Markdown, or OPML for use in other apps.
+
+---
+
+## Keyboard Shortcuts
+
+| Keys | Action |
+|------|--------|
+| **A** | Add Chunk |
+| **C** | Center on Last |
+| **Esc** | Deselect / Close Modals |
+| **Del / Backspace** | Delete Selected |
+| **+ / - / =** | Zoom |
+| **0** | Reset Zoom |
+| **Ctrl / Cmd + S** | Save |
+| **Ctrl / Cmd + O** | Load |
+| **Ctrl / Cmd + Z** | Undo Delete |
+
+---
+
+## Chunk Types & Shapes
+
+A chunk's shape is determined by its functional tag. You do not select shapes manually; you select the chunk's purpose, and the shape is assigned automatically.
+
+| Shape | Tag | Description |
+|-------|-----|-------------|
+| ◯ Circle | Seed thought | Core concept |
+| ▢ Square | Key points | Key supporting points or moments |
+| ◇ Diamond | Exploration | Deeper exploration, examples, nuance |
+| ▱ Panel | Details | Details, quotes, sensory notes |
+| ⤣ Hook arrow | Transition | Bridge between sections or ideas |
+| ↺ Loop | Reference | Refers to another chunk, prior note, or core concept |
+| = Equals | Conclusion | Ending remarks, reflection, resolution |
+| ⓘ Info | Background | Background or literature review |
+| ≠ Not equal | Opposition | Opposing viewpoints or challenges |
+| ⇢ Forward arrow | Application | Real-world relevance, how-to steps |
+| ◷ Time dial | Time | Passage of time |
+| ⌖ Location pin | Location | Location change |
+| ◷+⌖ Combine | Time & Place | Combined time and place shift |
+| ↶ Back arrow | Memory | Memory or past event |
+| ~ Tilde | Surreal | Altered states, hallucinations, surreal elements |
+| ◐ Half circle | Perspective | Change in narrative lens or point of view |
+
+---
+
+## Color Tags (Emotional Cues)
+
+Color is used to signal the emotional tone or temperature of a chunk. It is independent of the chunk's structural role.
+
+| Color | Meaning |
+|-------|---------|
+| 🟢 Green | Grounded, stable |
+| 🟡 Yellow | Curious, exploratory |
+| 🔵 Blue | Calm, reflective |
+| 🟣 Purple | Deep, contemplative |
+| 🔴 Red | Urgency, conflict |
+| 🩶 Grey | Fog, uncertainty |
