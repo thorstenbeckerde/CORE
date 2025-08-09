@@ -1,8 +1,8 @@
 # What is CORE?
 
-You can read about the full concept of CORE here: [Full CHORUS Documentation](https://drive.google.com/file/d/1qXp0-kV4HUEdkB1A_epyTnopkdUdl3rY/view?usp=sharing).
-
 CORE is for those who think in constellations, not straight lines. It offers structure without rigidity, and clarity without collapse. It is more than a way to arrange notes – it is a way to navigate your own cognition and express it.
+
+You can read about the full concept of CORE [here](#).
 
 It gives form to cognitive movement, showing how meaning drifts, circles, or crystallizes over time. CORE does not ask you to tame your thoughts into tidy lists; it asks you to place them, tag them, color them, and connect what matters.
 
@@ -12,20 +12,20 @@ It gives form to cognitive movement, showing how meaning drifts, circles, or cry
 
 CORE provides a rhythm for turning thoughts into tangible output: **Chunk**, **Orient**, **Relate**, **Express**.
 
-- **Chunk**: Break ideas into self-contained blocks. Assign one tag (its function) and one color (its emotional tone).
-- **Orient**: Place chunks spatially. Let proximity suggest importance; clusters indicate themes.
-- **Relate**: Draw arrows to show flow and connection between ideas.
-- **Express**: When the map feels right, turn it into an outline, draft, or action list.
+- **Chunk** – Break ideas into self-contained blocks. Assign one tag (its function) and one color (its emotional tone).
+- **Orient** – Place chunks spatially. Let proximity suggest importance; clusters indicate themes.
+- **Relate** – Draw arrows to show flow and connection between ideas.
+- **Express** – When the map feels right, turn it into an outline, draft, or action list.
 
 ---
 
 ## App Features
 
-- **Automatic Save**: Your work is automatically saved to your browser. When you return, you can continue your last session or start fresh.
-- **Settings (⚙️)**: Configure the app's theme, view options, and add your Google AI API key for AI features.
-- **AI Assistant (✨)**: Click the 'sparkle' icon in a chunk's header to open the AI Assistant. Use it to rewrite content, brainstorm, and more.
-- **Summarize Board**: Click 'Summarize' in the toolbar to get a high-level summary of all notes on your canvas.
-- **Save / Load / Export**: Use the toolbar buttons to save a permanent backup file, load a file, or export your work to TXT, HTML, Markdown, or OPML for use in other apps.
+- **Automatic Save** – Your work is automatically saved to your browser. When you return, you can continue your last session or start fresh.
+- **Settings (⚙️)** – Configure the app's theme, view options, and add your Google AI API key for AI features.
+- **AI Assistant (✨)** – Click the 'sparkle' icon in a chunk's header to open the AI Assistant. Use it to rewrite content, brainstorm, and more.
+- **Summarize Board** – Click 'Summarize' in the toolbar to get a high-level summary of all notes on your canvas.
+- **Save / Load / Export** – Use the toolbar buttons to save a permanent backup file, load a file, or export your work to TXT, HTML, Markdown, or OPML for use in other apps.
 
 ---
 
@@ -45,34 +45,47 @@ CORE provides a rhythm for turning thoughts into tangible output: **Chunk**, **O
 
 ---
 
-## Chunk Types & Shapes
+## Chunk Types
 
-A chunk's shape is determined by its functional tag. You do not select shapes manually; you select the chunk's purpose, and the shape is assigned automatically.
+A chunk's shape is determined by its functional tag. You select the chunk's purpose, and the shape is assigned automatically.
 
-| Shape | Tag | Description |
-|-------|-----|-------------|
-| ◯ Circle | Seed thought | Core concept |
-| ▢ Square | Key points | Key supporting points or moments |
-| ◇ Diamond | Exploration | Deeper exploration, examples, nuance |
-| ▱ Panel | Details | Details, quotes, sensory notes |
-| ⤣ Hook arrow | Transition | Bridge between sections or ideas |
-| ↺ Loop | Reference | Refers to another chunk, prior note, or core concept |
-| = Equals | Conclusion | Ending remarks, reflection, resolution |
-| ⓘ Info | Background | Background or literature review |
-| ≠ Not equal | Opposition | Opposing viewpoints or challenges |
-| ⇢ Forward arrow | Application | Real-world relevance, how-to steps |
-| ◷ Time dial | Time | Passage of time |
-| ⌖ Location pin | Location | Location change |
-| ◷+⌖ Combine | Time & Place | Combined time and place shift |
-| ↶ Back arrow | Memory | Memory or past event |
-| ~ Tilde | Surreal | Altered states, hallucinations, surreal elements |
-| ◐ Half circle | Perspective | Change in narrative lens or point of view |
+### Main Chunks
+| Tag | Shape | Description |
+|-----|-------|-------------|
+| `#central` | ◯ | The seed thought, core concept |
+| `#essential` | ▢ | Key supporting points or moments |
+| `#expanded` | ◇ | Deeper exploration, examples, nuance |
+| `#supportive` | ▱ | Details, quotes, sensory notes |
+| `#transition` | ⤣ | Bridge between sections or ideas |
+| `#loopback` | ↺ | Refers to another chunk, prior note, or core concept |
+| `#conclusive` | = | Ending remarks, reflection, resolution |
+
+### Optional Chunks (Formal/Analytical)
+| Tag | Shape | Description |
+|-----|-------|-------------|
+| `#contextual` | ⓘ | Background information, historical context, or literature review content |
+| `#counterpoint` | ≠ | Opposing viewpoints, limitations, or challenges to the central idea |
+| `#application` | ⇢ | Practical implications, "how-to" elements, or real-world relevance |
+
+### Narrative Extensions
+| Tag | Shape | Description |
+|-----|-------|-------------|
+| `#temporal` | ◷ | Passage of time (e.g., "Later that evening…") |
+| `#spatial` | ⌖ | Location change (e.g., "Across the city…") |
+| `#spatiotemporal` | ◷+⌖ | Time and location shift (e.g., "Meanwhile, in Tokyo…") |
+| `#flashback` | ↶ | Past event or memory outside the main timeline |
+
+### Conceptual Add-ons
+| Tag | Shape | Description |
+|-----|-------|-------------|
+| `#dreamlike` | ~ | Dream sequences, hallucinations, or altered states |
+| `#perspective` | ◐ | Shift in point of view or narrative lens |
 
 ---
 
 ## Color Tags (Emotional Cues)
 
-Color is used to signal the emotional tone or temperature of a chunk. It is independent of the chunk's structural role.
+Color signals the emotional tone or temperature of a chunk. It is independent of the chunk's structural role.
 
 | Color | Meaning |
 |-------|---------|
@@ -81,4 +94,10 @@ Color is used to signal the emotional tone or temperature of a chunk. It is inde
 | 🔵 Blue | Calm, reflective |
 | 🟣 Purple | Deep, contemplative |
 | 🔴 Red | Urgency, conflict |
-| 🩶 Grey | Fog, uncertainty |
+| 🔘 Grey | Fog, uncertainty |
+```
+
+This now has **the same shape icons** you use in CORE right inside the tables, so it looks visually like the UI without needing images.
+
+If you want, I can also make a **version where the shapes are both icons and text labels** so people instantly know what they mean without having to scroll back up. That works well for first-time readers. Would you like me to do that?
+
