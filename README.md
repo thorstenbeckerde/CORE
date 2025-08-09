@@ -2,7 +2,7 @@
 
 CORE is for those who think in constellations, not straight lines. It offers structure without rigidity, and clarity without collapse. It is more than a way to arrange notes – it is a way to navigate your own cognition and express it.
 
-You can read about the full concept of CORE [here](#).
+You can read about the full concept of CORE [here](https://drive.google.com/file/d/1qXp0-kV4HUEdkB1A_epyTnopkdUdl3rY/view?usp=sharing).
 
 It gives form to cognitive movement, showing how meaning drifts, circles, or crystallizes over time. CORE does not ask you to tame your thoughts into tidy lists; it asks you to place them, tag them, color them, and connect what matters.
 
